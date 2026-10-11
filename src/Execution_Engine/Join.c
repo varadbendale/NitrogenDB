@@ -200,7 +200,7 @@ void join_equal_clause( compiler * c  , select_select_info * from  , select_from
     int hash_cursor  ; 
     int pirmary_key_first_loc ; 
     int primary_key_second_loc ; 
-    c->select->join[c->select->join_counter]->join_table_counter = tables_and_thier_cursor(c , from ) ; 
+    c->select->join[c->select->join_counter]->join_table_counter = tables_and_thier_cursor_num(c , from ) ; 
     for ( int i = 0 ; i < num  ; i++ ){
         emit(c , open_read_op , c->cursor_num + i , c->tl->tables[i]->root_page_num ; ,  -1 , -1 , NULL    ) ; 
     }
@@ -275,6 +275,9 @@ void join_equal_clause( compiler * c  , select_select_info * from  , select_from
 
 
 }
+
+
+
 
 void* get_the_max_and_min(compiler * c  ){
     c->select->join[c->select->join_counter]->join_select_unique_table ; 
@@ -1148,7 +1151,6 @@ void* join_inequality_clause(compiler * c, select_select_info * from  , select_f
     
     
 }
-
 
 
 

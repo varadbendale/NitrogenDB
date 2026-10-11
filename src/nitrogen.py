@@ -1,13 +1,17 @@
 import tkinter as tk
 from tkinter import font as tkfont
 
-BG = "#000000"
-FG = "#ffffff"
-DIM = "#555555"
-FONT_FAMILY = "Courier"
-FONT_SIZE = 13
-PROMPT = "numes> "
+# ── theme ─────────────────────────────────────────────────────────────────────
 
+BG         = "#000000"
+FG         = "#ffffff"
+DIM        = "#555555"
+FONT_FAMILY = "Courier"
+FONT_SIZE   = 13
+PROMPT      = "numes> "
+
+
+# ── mock query engine ─────────────────────────────────────────────────────────
 
 def execute_query(filename, query):
     q = query.strip().lower()
@@ -32,6 +36,8 @@ def execute_query(filename, query):
         return f"unrecognized query — type \\help for syntax"
 
 
+# ── main app ──────────────────────────────────────────────────────────────────
+
 class NumesApp(tk.Tk):
 
     def __init__(self):
@@ -41,38 +47,65 @@ class NumesApp(tk.Tk):
         self.geometry("860x560")
         self.minsize(600, 400)
         self.configure(bg=BG)
+
+        # one font object used everywhere
         self.font = tkfont.Font(family=FONT_FAMILY, size=FONT_SIZE)
 
-        self.history = []
+        self.history       = []
         self.history_index = -1
         self.authenticated = False
-        self.active_file = ""
+        self.active_file   = ""
 
         self._build_ui()
         self._print_banner()
         self.file_entry.focus_set()
 
 
+    # ── ui layout ─────────────────────────────────────────────────────────────
+
     def _build_ui(self):
         f = self.font
+
+        # ── top bar ───────────────────────────────────────────────────────────
         bar = tk.Frame(self, bg=BG, height=36)
         bar.pack(fill="x", side="top")
         bar.pack_propagate(False)
 
-        tk.Label(bar, text="file:", font=f, bg=BG, fg=FG).pack(side="left", padx=(14, 2), pady=6)
-        self.file_entry = tk.Entry(bar, font=f, width=18, bg=BG, fg=FG, insertbackground=FG, relief="flat", highlightthickness=0, bd=0)
+        tk.Label(bar, text="file:", font=f, bg=BG, fg=FG).pack(
+            side="left", padx=(14, 2), pady=6)
+
+        self.file_entry = tk.Entry(
+            bar, font=f, width=18,
+            bg=BG, fg=FG, insertbackground=FG,
+            relief="flat", highlightthickness=0, bd=0
+        )
         self.file_entry.pack(side="left", pady=6)
-        tk.Label(bar, text="pass:", font=f, bg=BG, fg=FG).pack(side="left", padx=(14, 2), pady=6)
-        self.pass_entry = tk.Entry(bar, font=f, width=14, show="•", bg=BG, fg=FG, insertbackground=FG, relief="flat", highlightthickness=0, bd=0)
+
+        tk.Label(bar, text="pass:", font=f, bg=BG, fg=FG).pack(
+            side="left", padx=(14, 2), pady=6)
+
+        self.pass_entry = tk.Entry(
+            bar, font=f, width=14, show="•",
+            bg=BG, fg=FG, insertbackground=FG,
+            relief="flat", highlightthickness=0, bd=0
+        )
         self.pass_entry.pack(side="left", pady=6)
 
-        self.connect_btn = tk.Label( bar, text="connect", font=f, bg=BG, fg=FG, cursor="hand2"
+        self.connect_btn = tk.Label(
+            bar, text="connect", font=f,
+            bg=BG, fg=FG, cursor="hand2"
         )
         self.connect_btn.pack(side="left", padx=10, pady=6)
         self.connect_btn.bind("<Button-1>", lambda e: self._handle_connect())
-        self.status_label = tk.Label(bar, text="● disconnected", font=f, bg=BG, fg=FG )
+
+        self.status_label = tk.Label(
+            bar, text="● disconnected", font=f, bg=BG, fg=FG
+        )
         self.status_label.pack(side="right", padx=14)
-        self.terminal = tk.Text(self,
+
+        # ── terminal ──────────────────────────────────────────────────────────
+        self.terminal = tk.Text(
+            self,
             bg=BG, fg=FG,
             font=f,
             insertbackground=FG,
@@ -102,6 +135,8 @@ class NumesApp(tk.Tk):
         self.pass_entry.bind("<Return>", lambda e: self._handle_connect())
 
 
+    # ── banner ────────────────────────────────────────────────────────────────
+
     def _print_banner(self):
         self._write(
             " NumesDB  v0.0.1\n",
@@ -109,6 +144,8 @@ class NumesApp(tk.Tk):
         )
         self._new_prompt()
 
+
+    # ── connect ───────────────────────────────────────────────────────────────
 
     def _handle_connect(self):
         filename = self.file_entry.get().strip()
@@ -197,6 +234,8 @@ class NumesApp(tk.Tk):
         return "break"
 
 
+    # ── meta commands ─────────────────────────────────────────────────────────
+
     def _handle_meta(self, cmd):
         if cmd in ("\\q", "\\quit"):
             self.quit()
@@ -239,10 +278,10 @@ class NumesApp(tk.Tk):
             if self.authenticated:
                 self._write(
                     f"\n"
-                    f"  file : {self.active_file}\n"
-                    f"  node : node1\n"
-                    f"  ip : 192.168.1.10\n"
-                    f"  peers : 2 connected\n\n"
+                    f"  file     : {self.active_file}\n"
+                    f"  node     : node1\n"
+                    f"  ip       : 192.168.1.10\n"
+                    f"  peers    : 2 connected\n\n"
                 )
             else:
                 self._write("not connected\n\n", "dim")
@@ -251,6 +290,7 @@ class NumesApp(tk.Tk):
             self._write(f"unknown command '{cmd}' — type \\help\n\n")
 
 
+    # ── history ───────────────────────────────────────────────────────────────
 
     def _history_up(self, event=None):
         if not self.history:
@@ -279,11 +319,14 @@ class NumesApp(tk.Tk):
         self.terminal.mark_set("insert", "end")
 
 
+    # ── write ─────────────────────────────────────────────────────────────────
 
     def _write(self, text, tag="normal"):
         self.terminal.insert("end", text, tag)
         self.terminal.see("end")
 
+
+# ── run ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     app = NumesApp()

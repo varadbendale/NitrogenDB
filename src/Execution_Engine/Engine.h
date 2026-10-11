@@ -195,6 +195,7 @@ typedef struct compiler {
     int capacity;
     int register_counter;
     int sorter_cursor;
+    Tree_def * tree ; 
     int register_start;
     tables_list *tl;
     int cursor_num;

@@ -20,6 +20,14 @@ dtree* createNodeDelete( char* comp) {
     return node;
 }
 
+dtree* d_or( char ***buf , int *i , int *j ) ;
+dtree* d_and( char ***buf , int *i , int *j ) ;
+dtree* d_not( char ***buf , int *i , int *j ) ;
+dtree* d_cmp( char ***buf , int *i , int *j ) ;
+dtree* d_sum( char ***buf , int *i , int *j ) ;
+dtree* d_mul( char ***buf , int *i , int *j ) ;
+dtree* d_unary( char ***buf , int *i , int *j ) ;
+dtree* d_primary( char ***buf , int *i , int *j ) ;
 
 
 dtree* d_bin( char *op , dtree *left , dtree *right ){

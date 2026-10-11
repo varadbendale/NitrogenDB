@@ -36,48 +36,6 @@ insert_parser_tree *createNodeInsert(char *comp) {
 }
 
 
-int priority(char *string){
-    if ( strcmp("CASE" , string ) == 0 ||  strcmp("ON" , string ) == 0   ){
-        return 1 ; 
-    }
-    else if (strcmp("OR" , string ) == 0  ){
-        return 2 ; 
-    }
-    else if (strcmp("AND" , string ) == 0  ){
-        return 3 ; 
-    }
-    else if (strcmp("NOT" , string ) == 0  ){
-        return 4 ; 
-    }
-    else if (strcmp("BETWEEN", string) == 0 || strcmp("IN", string) == 0 || strcmp("LIKE", string) == 0 || strcmp("IS", string) == 0 || strcmp("EXISTS", string) == 0 || strcmp("IS NULL", string) == 0 || strcmp("IS NOT NULL", string) == 0 || strcmp("NOT IN", string) == 0 || strcmp("NOT LIKE", string) == 0 || strcmp("NOT BETWEEN", string) == 0){
-         return 5;
-    }
-    else if (  strcmp("=" , string ) == 0  || strcmp("!=" , string ) == 0  || strcmp("<>" , string ) == 0  || strcmp(">" , string ) == 0  || strcmp("<" , string ) == 0  || strcmp(">=" , string ) == 0  || strcmp("<=" , string ) == 0  ){
-        return 6 ; 
-    }
-    else if (strcmp("||" , string ) == 0   ){
-        return 7 ; 
-    }
-    else if ( strcmp("+" , string ) == 0   || strcmp("-" , string ) == 0  ){
-        return 8 ; 
-    }
-    else if (strcmp("*" , string ) == 0   || strcmp("/" , string ) == 0  || strcmp("%" , string ) == 0   ) {
-        return 9 ; 
-    }
-    return 0  ; 
-}
-
-
-bool if_function(char *string) {
-    if (string == NULL ){
-        return false;
-    } 
-    if (strcmp(tok,"NOW")==0 ||strcmp(tok,"COUNT")==0||  strcmp(tok,"SUM")==0 || strcmp(tok,"MAX")==0){
-        return true;
-    } 
-    return false;
-}
-
 
 insert_parser_tree* expression_insert(char ***buf, insert_parser_tree *node,  int i, int j, int end_row, int end_col) {
     char *operands[300];
@@ -658,3 +616,8 @@ itree * insert_parser(){
     return start ; 
 
 }
+
+
+
+//                      INSERT IGNORE   REPLACE INTO	    ON DUPLICATE KEY UPDATE
+// Conflict behavior	Skip entirely	Delete + reinsert	Update specific columns

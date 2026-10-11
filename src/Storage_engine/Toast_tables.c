@@ -162,17 +162,17 @@ char *toast_tables_insert(char *data) {
         } 
         else {
             toast_header->pages_used++;
-            if (size > 2752) {
+            if (size > use_page_size) {
                 page *pg = malloc(sizeof(page));
                 pg->header.page_num = toast_header->pages_used;
                 pg->header.page_type = toast;
                 pg->header.num = 0;
                 pg->slot[pg->header.num].offset = 0;
-                pg->slot[pg->header.num].size = 2752;
+                pg->slot[pg->header.num].size = use_page_size;
                 pg->header.num++;
-                memcpy(pg->data, data + offset, 2752);
-                offset = offset + 2752;
-                size = size - 2752;
+                memcpy(pg->data, data + offset, use_page_size);
+                offset = offset + use_page_size;
+                size = size - use_page_size;
                 pg->header.free_size = 0;
                 int temp_slot_num = toast_header->pages_used / 8;
                 toast_header->dead_space_available[temp_slot_num] |= (1 << (7 - (toast_header->pages_used % 8)));
@@ -191,16 +191,16 @@ char *toast_tables_insert(char *data) {
                 pg->slot[pg->header.num].size = 0;
                 pg->header.num++;
                 memcpy(pg->data, data + offset, size - offset);
-                if (2752 - size >= 612) {
-                    toast_header->dead_space = toast_header->dead_space + (2752 - size);
-                    pg->header.free_size = pg->header.free_size + (2752 - size);
+                if (use_page_size - size >= 612) {
+                    toast_header->dead_space = toast_header->dead_space + (use_page_size - size);
+                    pg->header.free_size = pg->header.free_size + (use_page_size - size);
                     int temp_slot_num = toast_header->pages_used / 8;
                     toast_header->dead_space_available[temp_slot_num] &= ~(1 << (7 - (toast_header->pages_used % 8)));
                     temp_slot_num = pg->header.num / 8;
                     pg->header.dead_slots[temp_slot_num] |= (1 << (7 - ((pg->header.num - 1) % 8)));
                 }
                 else {
-                    pg->header.free_size = pg->header.free_size + (2752 - size);
+                    pg->header.free_size = pg->header.free_size + (use_page_size - size);
                     int temp_slot_num = toast_header->pages_used / 8;
                     toast_header->dead_space_available[temp_slot_num] |= (1 << (7 - (toast_header->pages_used % 8)));
                     temp_slot_num = pg->header.num / 8;

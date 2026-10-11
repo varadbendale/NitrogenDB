@@ -65,7 +65,7 @@ char *to_decimal(const char *str, int precision, int scale){
 }
 
 
-struct_for_insert(itree * tree ){
+void struct_for_insert(itree * tree ){
     int error ; 
     insert_page * ins ; 
     if (strcmp(tree->comp , "INSERT INTO" )== 0 ){
@@ -115,13 +115,13 @@ struct_for_insert(itree * tree ){
             }
         }
     }
-    char ** temp_columns = calloc(128, sizeof(char *));
+    char ** temp_column = calloc(128, sizeof(char *));
     int heck = 0 ; 
-    int hash_1[307] ; 
-    int hash_2[307] ; 
+    int hash_1[307] = {0};
+    int hash_2[307] = {0};
     int position_org[307] ; 
     int position_written[307] ; 
-    if (table->table_col_num > 0 ){
+    if (temp_table->table_col_num > 0 ){
         int temp_1 = 0 ; 
         int temp_2 = 0 ; 
         while ( temp_1 < temp_table.num_columns ){
@@ -130,8 +130,8 @@ struct_for_insert(itree * tree ){
             position_org[num] = temp_1 ; 
             temp_1++ ;    
         }
-        while ( temp_2 < table->table_col_num ){
-            int num = hash_num( table->table_cols[temp_2]) ; 
+        while ( temp_2 < temp_table->table_col_num ){
+            int num = hash_num( temp_table->table_cols[temp_2]) ; 
             hash_2[num] = num ; 
             position_written[temp_2] = num ; 
             temp_2++ ;    
@@ -157,17 +157,17 @@ struct_for_insert(itree * tree ){
         }
 
     }
-    char ** col_temp = calloc(128, sizeof(char *)); 
     int d = 0  ; 
     int counter = 0 ; 
     while ( d < tree->num ){
+        char ** col_temp = calloc(128, sizeof(char *)); 
         if (strcmp(tree->children[d]->comp ,"VALUE_ROW" ) == 0 ){
             itree * temp_tree = tree->children[d] ; 
             int e = 0 ; 
             int f = 0 ; 
             int col_num = 0 ; 
             while ( f < temp_table.num_columns){
-                int temp_num = hash_num(temp_table.columns[f].col_name)
+                int temp_num = hash_num(temp_table.columns[f].col_name) ; 
                 if (hash_2[temp_num] == temp_num){
                     if (temp_table.columns[f].primary_key == true  ){
                         if (check_hash(temp_tree->children[e]->comp , f ) == 0 ){
@@ -239,9 +239,10 @@ struct_for_insert(itree * tree ){
                 }
                 f++ ; 
             }
-
+            // get the stuff put it in the page  ; 
         }
         d++ ; 
+
     }
 
 }

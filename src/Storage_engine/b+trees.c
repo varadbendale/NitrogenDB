@@ -307,12 +307,10 @@ int validate_the_tree(internal_node * root ){
 }   
 
 
-void delete_the_thing(internal_node * node , int key ){
-    int for_change[32] ; 
+internal_node * delete_the_thing(internal_node * node , int key ){
     int first_pos[32] ; 
     internal_node * temp = node ; 
     internal_node * temp_stack[32] ; 
-    int for_second_change[32] ;
     int second_pos[32] ; 
     int k = 0 ; 
     temp_stack[k++] = node ; 
@@ -339,12 +337,6 @@ void delete_the_thing(internal_node * node , int key ){
             if (first_alrm == -1 ){
                 first_alrm = temp_counter ; 
             } 
-        }
-        if (low < temp->num_of_leaf ){
-            for_change[temp_counter] = temp->primary_key[low] ;
-        }
-        else {
-            for_change[temp_counter] = -1 ;
         }
         first_pos[temp_counter] = low ; 
         temp_counter++ ; 
@@ -380,11 +372,11 @@ void delete_the_thing(internal_node * node , int key ){
         }
     }
     if ( happen_or_no == 0 ){
-        return ;
+        return node ;
     }
 
     if (temp->num_of_data_pushed >= no_of_data / 2 ){
-        return ; 
+        return node ; 
     }
     else { 
         internal_node * the_next_one = temp->next ; 
@@ -397,8 +389,8 @@ void delete_the_thing(internal_node * node , int key ){
             int the_updated_mid ; 
             int first_steps ; 
             if (prev->num_of_data_pushed - 1 >= no_of_data / 2){
-                for (int x = temp->num_of_children ; x > 0 ; x--){
-                    temp->children[x] = temp->children[x-1] ; 
+                for (int x = temp->num_of_data_pushed ; x > 0 ; x--){
+                    temp->data[x] = temp->data[x-1] ; 
                 }
                 for (int x = temp->num_of_leaf ; x > 0 ; x--){
                     temp->primary_key[x] = temp->primary_key[x-1] ; 
@@ -654,40 +646,40 @@ void delete_the_thing(internal_node * node , int key ){
             free(the_next_one) ;
 
 
-            int remove_counter = 0 ; 
-            while ( temp_stack[remove_counter]->num_of_children == 1 ){
-                remove_counter++ ; 
-            }
-            int kappa = 0 ; 
-            int jojo = remove_counter  ; 
-            int first = 0 ; 
-            while ( jojo < second_counter ){
-                if (first  == 0 ){
-                    node = temp_stack[kappa ] ; 
-                }
-                temp_stack[kappa ] = temp_stack[jojo] ; 
-                for_change[kappa] = for_change[jojo] ; 
-                first_pos[kappa] = first_pos[jojo] ; 
-                first_counter-- ; 
-                next_temp_stack[kappa ] = next_temp_stack[jojo] ; 
-                for_second_change[kappa] = for_second_change[jojo] ; 
-                second_pos[kappa] = second_pos[jojo] ; 
-                first_counter-- ; 
-                kappa++ ; 
-                jojo++ ; 
-            }
-            while ( kappa < remove_counter ){
-                temp_stack[kappa ] = NULL ; 
-                for_change[kappa] = -1 ; 
-                first_pos[kappa] = -1  ; 
-                next_temp_stack[kappa ] = NULL ; 
-                for_second_change[kappa] = -1 ; 
-                second_pos[kappa] = -1 ; 
-                kappa++ ; 
-            }
-            if (validate_the_tree(node )  == 1 ){
-                 return ; //error ; 
-            }
+            // int remove_counter = 0 ; 
+            // while ( temp_stack[remove_counter]->num_of_children == 1 ){
+            //     remove_counter++ ; 
+            // }
+            // int kappa = 0 ; 
+            // int jojo = remove_counter  ; 
+            // int first = 0 ; 
+            // while ( jojo < second_counter ){
+            //     if (first  == 0 ){
+            //         node = temp_stack[kappa ] ; 
+            //     }
+            //     temp_stack[kappa ] = temp_stack[jojo] ; 
+            //     for_change[kappa] = for_change[jojo] ; 
+            //     first_pos[kappa] = first_pos[jojo] ; 
+            //     first_counter-- ; 
+            //     next_temp_stack[kappa ] = next_temp_stack[jojo] ; 
+            //     for_second_change[kappa] = for_second_change[jojo] ; 
+            //     second_pos[kappa] = second_pos[jojo] ; 
+            //     first_counter-- ; 
+            //     kappa++ ; 
+            //     jojo++ ; 
+            // }
+            // while ( kappa < remove_counter ){
+            //     temp_stack[kappa ] = NULL ; 
+            //     for_change[kappa] = -1 ; 
+            //     first_pos[kappa] = -1  ; 
+            //     next_temp_stack[kappa ] = NULL ; 
+            //     for_second_change[kappa] = -1 ; 
+            //     second_pos[kappa] = -1 ; 
+            //     kappa++ ; 
+            // }
+            // if (validate_the_tree(node )  == 1 ){
+            //      return ; //error ; 
+            // }
 
 
 
@@ -928,37 +920,37 @@ void delete_the_thing(internal_node * node , int key ){
                     if (next_temp_stack[second_counter]->num_of_children >=  no_of_data / 2 ){
                         break ; 
                     }
-                    remove_counter = 0 ; 
-                    while ( temp_stack[remove_counter]->num_of_children == 1 ){
-                        remove_counter++ ; 
-                    }
-                    kappa = 0 ; 
-                    jojo = remove_counter  ; 
-                    first = 0 ; 
-                    while ( jojo < second_counter ){
-                        if (first  == 0 ){
-                            node = temp_stack[kappa ] ; 
-                        }
-                        temp_stack[kappa ] = temp_stack[jojo] ; 
-                        for_change[kappa] = for_change[jojo] ; 
-                        first_pos[kappa] = first_pos[jojo] ; 
-                        first_counter-- ; 
-                        next_temp_stack[kappa ] = next_temp_stack[jojo] ; 
-                        for_second_change[kappa] = for_second_change[jojo] ; 
-                        second_pos[kappa] = second_pos[jojo] ; 
-                        first_counter-- ; 
-                        kappa++ ; 
-                        jojo++ ; 
-                    }
-                    while ( kappa < remove_counter ){
-                        temp_stack[kappa ] = NULL ; 
-                        for_change[kappa] = -1 ; 
-                        first_pos[kappa] = -1  ; 
-                        next_temp_stack[kappa ] = NULL ; 
-                        for_second_change[kappa] = -1 ; 
-                        second_pos[kappa] = -1 ; 
-                        kappa++ ; 
-                    }
+                    // remove_counter = 0 ; 
+                    // while ( temp_stack[remove_counter]->num_of_children == 1 ){
+                    //     remove_counter++ ; 
+                    // }
+                    // kappa = 0 ; 
+                    // jojo = remove_counter  ; 
+                    // first = 0 ; 
+                    // while ( jojo < second_counter ){
+                    //     if (first  == 0 ){
+                    //         node = temp_stack[kappa ] ; 
+                    //     }
+                    //     temp_stack[kappa ] = temp_stack[jojo] ; 
+                    //     for_change[kappa] = for_change[jojo] ; 
+                    //     first_pos[kappa] = first_pos[jojo] ; 
+                    //     first_counter-- ; 
+                    //     next_temp_stack[kappa ] = next_temp_stack[jojo] ; 
+                    //     for_second_change[kappa] = for_second_change[jojo] ; 
+                    //     second_pos[kappa] = second_pos[jojo] ; 
+                    //     first_counter-- ; 
+                    //     kappa++ ; 
+                    //     jojo++ ; 
+                    // }
+                    // while ( kappa < remove_counter ){
+                    //     temp_stack[kappa ] = NULL ; 
+                    //     for_change[kappa] = -1 ; 
+                    //     first_pos[kappa] = -1  ; 
+                    //     next_temp_stack[kappa ] = NULL ; 
+                    //     for_second_change[kappa] = -1 ; 
+                    //     second_pos[kappa] = -1 ; 
+                    //     kappa++ ; 
+                    // }
                     if (validate_the_tree(node )  == 1 ){
                         return ; //error ; 
                     }

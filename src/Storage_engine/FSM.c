@@ -19,13 +19,16 @@ page *get_page_from_file(int offset) {
     return ans;
 }
 
-void write_page_to_file(page *p, int offset, char *filename) {
+void write_page_to_file(page *p, int offset ){
     FILE *file = fopen(filename, "r+b");
     if (file == NULL) {
         file = fopen(filename, "w+b");
         if (file == NULL){
             return ; 
         }
+    }
+    if (offset == -1 ){
+        offset = lseek(fd, 0, SEEK_END);
     }
     fseek(file, offset, SEEK_SET);
     fwrite(p, 1, sizeof(page), file);

@@ -1,5 +1,46 @@
 #include "Engine.h"
 
+select_ob_info *expre_order_by(select_ob_info *ans ,    compiler *c , tree * temp){
+    int i = 0 ; 
+    while (i < temp->num){
+        if (strcmp(temp->children[i]->comp , "+")== 0 || strcmp(temp->children[i]->comp, "-")== 0 || strcmp(temp->children[i]->comp, "*")== 0 || strcmp(temp->children[i]->comp, "/")== 0 || strcmp(temp->children[i]->comp , "=")== 0 || strcmp(temp->children[i]->comp, "!=")== 0 || strcmp(temp->children[i]->comp , ">")== 0 || strcmp(temp->children[i]->comp , ">=")== 0 || strcmp(temp->children[i]->comp , "<")== 0 || strcmp(temp->children[i]->comp, "<=")== 0 || strcmp(temp->children[i]->comp , "GROUP_CONCAT")== 0 || strcmp(temp->children[i]->comp , "MAX") == 0 || strcmp(temp->children[i]->comp , "MIN") == 0 || strcmp(temp->children[i]->comp , "COUNT") == 0 || strcmp(temp->children[i]->comp, "AVG") == 0 || strcmp(temp->children[i]->comp , "SUM") == 0){
+                ans->operator = temp->children[i]->comp;
+            if (ans->left == NULL ){
+                ans->left = malloc(sizeof(select_ob_info))
+                expre_order_by(ans->left, c, temp->children[i]);
+            }
+            else {
+                ans->right = malloc(sizeof(select_ob_info))
+                expre_order_by(ans->right, c, temp->children[i]);
+            }
+        }
+        else if (col_name_to_int_main(temp->children[i]->comp, c->select) != -1 ){
+            if (ans->col_name != NULL ){
+                    ans->extra_ob_name = temp->children[i]->comp ;
+            }
+            else { 
+                ans->ob_name = temp->children[i]->comp ;
+                }
+            }
+        else { 
+            int check = data_type_check(temp->children[i]->comp);
+            if (check == 0){
+                ans->num_value = atoi(temp->children[i]->comp);
+            }
+            else if (check == 1){
+                ans->float_val = (float)atof(temp->children[i]->comp);
+            }
+            else if (check == 2){
+                ans->blob = temp->children[i]->comp ;
+            }
+            else {
+                ans->char_value = temp->children[i]->comp ;
+            }
+        }
+    i++;
+    }
+    return ans ; 
+}
 
 void where_parser_to_struct(compiler *c , tree * select ){
     int i = 0 ; 
