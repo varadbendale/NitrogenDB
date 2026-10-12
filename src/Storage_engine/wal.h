@@ -1,9 +1,11 @@
+#include <sys/stat.h>
+#include <errno.h>
+#define default_segment_size 16777216
+#define max_size_for_data 8192
 typedef struct {
     int page_id ; 
     int offset ; 
-    int lenght ; 
-    int slot_num ; 
-    int pk ; 
+    int lenght ;  
     char inserted_data[] ; 
 } insert_info ;
 
@@ -18,29 +20,23 @@ typedef struct {
 typedef struct {
     int page_id ; 
     int offset ; 
-    int slot_num ; 
     int lenght ; 
-    int pk ; 
-    char deleted_data[] ; 
+    char deleted_data[max_size_for_data] ; 
 } delete_info ; 
 
 typedef struct {
     int page_id ; 
     int offset ; 
-    int slot_num ; 
     int updated_lenght ; 
-    int updated_pk ; 
-    char updated_data[] ; 
+    char updated_data[max_size_for_data] ; 
     int prev_lenght ; 
-    int prev_pk ; 
-    char prev_data[] ; 
+    char prev_data[max_size_for_data] ; 
 } update_info ; 
 
 typedef struct {
-    int running_transaction[] ; 
-    int dirty_page_id[] ; 
+    int running_transaction[max_size_for_data] ; 
+    int dirty_page_id[max_size_for_data] ; 
 } checkpoint_struct ; 
-
 
 
 typedef struct {
@@ -53,4 +49,23 @@ typedef struct {
         checkpoint_struct checkpoint;
     } record_value ;
     wal_page_header header;  
-} records ;
+} records_struct ;
+
+
+typedef struct {
+    int segment_id ; 
+    int status ; // 1 for insert 2 for delete 3 for update 4 for abort 5 for commit 6 for checkpoint 
+    int size ; 
+    int records_offset ; 
+}segment_struct ; 
+
+
+typedef struct {
+    int segment_num ; 
+    int transaction_num ; 
+    int lsn_num ; 
+    int num_of_run_transactions ; 
+    int running_transaction[] ; 
+    int num_of_dead_segments ; 
+    int dead_segments[] ; 
+}req_data ; 
