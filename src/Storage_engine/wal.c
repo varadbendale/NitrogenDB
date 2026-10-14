@@ -74,15 +74,15 @@ void default_segment(segment_struct  * seg_str  , int seg_num ){
     seg_str->records_offset = 0 ; 
 }
 
-void default_record( records_struct *record  , int type  , req_data dat ){
+void default_record( records_struct *record  , int type   ){
     memset(record , 0 , sizeof(records_struct)) ; 
     record.crc = 0 ; 
     record.type = type  ; 
-    record.header.lsn  = req_data.lsn_num++ ; 
+    record.header.lsn  = dat->lsn_num++ ; 
     record.header.lenght  = 0   ; 
     record.header.type = type ; 
     record.header.prev = -1   ; 
-    record.header.transaction  = dat.transaction_num ; 
+    record.header.transaction  = dat->transaction_num ; 
     if (type == 1 ){
         record.record_value.insert.page_id = -1 ; 
         record.record_value.insert.offset = 0 ; 
@@ -106,13 +106,22 @@ void default_record( records_struct *record  , int type  , req_data dat ){
     return record ; 
 }
 
-void insert_wal(int page_id , int offset , char *data ){
+void insert_wal(int transaction_id , int page_id , int offset , char *data ){
     int len = strlen(data)  ;
     int data_putted  = 0 ;  
     records_struct record ; 
     int declration = 2 ;  
-    int prev_lsn = -1 ; 
-    int transaction_id = dat->transaction_num++ ; 
+    int slot = -1 ;
+    for (int i = 0 ; i < 256 ; i++){
+        if (dat->running_transaction[i] == transaction_id){
+            slot = i ;
+            break ;
+        }
+    }
+    if (slot == -1){
+        return ;
+    }
+    int prev_lsn = dat->running_last_lsn[slot] ; 
     int record_size = records_sturct_size + max_size_for_data ; 
     while ( len > 0 ){
         int seg_num = dat->current_segment ; 
@@ -120,10 +129,10 @@ void insert_wal(int page_id , int offset , char *data ){
 
         file_num = create_segment_file(seg_num) ; 
         if (file_num == -1  ){
-            return  ; // error 
+            return  ; 
         }
         segment_struct seg_str ;
-        int size_of_the_thing = pread(fd, &seg_str, sizeof seg_str, 0);
+        int size_of_the_thing = pread(file_num, &seg_str, sizeof seg_str, 0);
         if (size_of_the_thing != sizeof(seg_str) ){
             default_segment(&seg_str , seg_num ) ; 
         }
@@ -132,7 +141,7 @@ void insert_wal(int page_id , int offset , char *data ){
             close(file_num) ;
             int next_seg_num = (seg_num + 1) % 256 ;
             if (dat->last_lsn_in_segment[next_seg_num] >= dat->the_farthest_lsn_required){
-                checkpoint() ;  // the checkpoint is required quickly as the thing is still full 
+                checkpoint() ;
                 return ;            
             }
             dat->current_segment = next_seg_num ; 
@@ -170,15 +179,17 @@ void insert_wal(int page_id , int offset , char *data ){
                     declration = write_record(file_num , seg_str.size , record ) ; 
                     if (declration == -1  ){
                         close(file_num) ;
-                        return  ; //error ; 
+                        return  ; 
                     }
                     seg_str.size = seg_str.size + data_we_put ;
                     dat->offset[seg_num] = seg_str.size ;
                     dat->last_lsn_in_segment[seg_num] = record.header.lsn ;
+                    if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+                    dat->running_last_lsn[slot] = record.header.lsn ;
                     declration = write_header(file_num , seg_str ) ; 
                     if ( declration == -1 ){
                         close(file_num) ;
-                        return  ; //error 
+                        return  ; 
                     }
                     num  = num - max_size_for_data ;
                 }
@@ -195,16 +206,18 @@ void insert_wal(int page_id , int offset , char *data ){
                     declration = write_record(file_num , seg_str.size , record ) ; 
                     if (declration == -1  ){
                         close(file_num) ;
-                        return  ; //error ; 
+                        return  ; 
                     }
                     prev_lsn = record.header.lsn ; 
                     seg_str.size = seg_str.size + data_we_put  ;
                     dat->offset[seg_num] = seg_str.size ;
                     dat->last_lsn_in_segment[seg_num] = record.header.lsn ; 
+                    if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+                    dat->running_last_lsn[slot] = record.header.lsn ;
                     declration = write_header(file_num , seg_str ) ; 
                     if ( declration == -1 ){
                         close(file_num) ;
-                        return  ; //error 
+                        return  ; 
                     }
                     num  = 0  ;
                 }
@@ -213,7 +226,7 @@ void insert_wal(int page_id , int offset , char *data ){
             declration = write_header(file_num , seg_str ) ; 
             if ( declration == -1 ){
                 close(file_num) ;   
-                return  ; //error 
+                return  ; 
             }
         }
         else {  
@@ -234,15 +247,17 @@ void insert_wal(int page_id , int offset , char *data ){
                     declration = write_record(file_num , seg_str.size , record ) ; 
                     if (declration == -1  ){
                         close(file_num) ;
-                        return  ; //error ; 
+                        return  ; 
                     }
                     seg_str.size = seg_str.size + data_we_put ;
                     dat->offset[seg_num] = seg_str.size ;
                     dat->last_lsn_in_segment[seg_num] = record.header.lsn ; 
+                    if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+                    dat->running_last_lsn[slot] = record.header.lsn ;
                     declration = write_header(file_num , seg_str ) ; 
                     if ( declration == -1 ){
                         close(file_num) ;
-                        return  ; //error 
+                        return  ; 
                     }
                     len  = len - max_size_for_data ;
                 }
@@ -259,21 +274,22 @@ void insert_wal(int page_id , int offset , char *data ){
                     declration = write_record(file_num , seg_str.size , record ) ; 
                     if (declration == -1  ){
                         close(file_num) ;
-                        return  ; //error ; 
+                        return  ; 
                     }
                     prev_lsn = record.header.lsn ; 
                     seg_str.size = seg_str.size + data_we_put ;
                     dat->offset[seg_num] = seg_str.size ;
                     dat->last_lsn_in_segment[seg_num] = record.header.lsn ; 
+                    if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+                    dat->running_last_lsn[slot] = record.header.lsn ;
                     declration = write_header(file_num , seg_str ) ; 
                     if ( declration == -1 ){
                         close(file_num) ;
-                        return  ; //error 
+                        return  ; 
                     }
                     len  = 0  ;
                 }
             }
-            prev_lsn = -1 ; 
             data_putted = 0 ; 
         }
         fsync(file_num) ;
@@ -284,13 +300,22 @@ void insert_wal(int page_id , int offset , char *data ){
 }
 
 
-void delete_wal(int page_id , int offset , char *data ){
+void delete_wal(int transaction_id , int page_id , int offset , char *data ){
     int len = strlen(data)  ;
     int data_putted  = 0 ;  
     records_struct record ; 
     int declration = 2 ;  
-    int prev_lsn = -1 ; 
-    int transaction_id = dat->transaction_num++ ; 
+    int slot = -1 ;
+    for (int i = 0 ; i < 256 ; i++){
+        if (dat->running_transaction[i] == transaction_id){
+            slot = i ;
+            break ;
+        }
+    }
+    if (slot == -1){
+        return ;
+    }
+    int prev_lsn = dat->running_last_lsn[slot] ; 
     int record_size = records_sturct_size + max_size_for_data ; 
     while ( len > 0 ){
         int seg_num = dat->current_segment ; 
@@ -353,6 +378,8 @@ void delete_wal(int page_id , int offset , char *data ){
                     seg_str.size = seg_str.size + data_we_put ;
                     dat->offset[seg_num] = seg_str.size ;
                     dat->last_lsn_in_segment[seg_num] = record.header.lsn ;
+                    if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+                    dat->running_last_lsn[slot] = record.header.lsn ;
                     declration = write_header(file_num , seg_str ) ; 
                     if ( declration == -1 ){
                         close(file_num) ;
@@ -379,6 +406,8 @@ void delete_wal(int page_id , int offset , char *data ){
                     seg_str.size = seg_str.size + data_we_put  ;
                     dat->offset[seg_num] = seg_str.size ;
                     dat->last_lsn_in_segment[seg_num] = record.header.lsn ; 
+                    if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+                    dat->running_last_lsn[slot] = record.header.lsn ;
                     declration = write_header(file_num , seg_str ) ; 
                     if ( declration == -1 ){
                         close(file_num) ;
@@ -417,6 +446,8 @@ void delete_wal(int page_id , int offset , char *data ){
                     seg_str.size = seg_str.size + data_we_put ;
                     dat->offset[seg_num] = seg_str.size ;
                     dat->last_lsn_in_segment[seg_num] = record.header.lsn ; 
+                    if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+                    dat->running_last_lsn[slot] = record.header.lsn ;
                     declration = write_header(file_num , seg_str ) ; 
                     if ( declration == -1 ){
                         close(file_num) ;
@@ -443,6 +474,8 @@ void delete_wal(int page_id , int offset , char *data ){
                     seg_str.size = seg_str.size + data_we_put ;
                     dat->offset[seg_num] = seg_str.size ;
                     dat->last_lsn_in_segment[seg_num] = record.header.lsn ; 
+                    if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+                    dat->running_last_lsn[slot] = record.header.lsn ;
                     declration = write_header(file_num , seg_str ) ; 
                     if ( declration == -1 ){
                         close(file_num) ;
@@ -451,7 +484,6 @@ void delete_wal(int page_id , int offset , char *data ){
                     len  = 0  ;
                 }
             }
-            prev_lsn = -1 ; 
             data_putted = 0 ; 
         }
         fsync(file_num) ;
@@ -462,7 +494,7 @@ void delete_wal(int page_id , int offset , char *data ){
 }
 
 
-void update_wal(int page_id , int offset , char *prev_data , int prev_len , char *updated_data , int updated_len ){
+void update_wal(int transaction_id , int page_id , int offset , char *prev_data , int prev_len , char *updated_data , int updated_len ){
     int len = prev_len ;
     if (updated_len > prev_len ){
         len = updated_len ;
@@ -471,8 +503,17 @@ void update_wal(int page_id , int offset , char *prev_data , int prev_len , char
     int updated_putted = 0 ;
     records_struct record ; 
     int declration = 2 ;  
-    int prev_lsn = -1 ; 
-    int transaction_id = dat->transaction_num++ ; 
+    int slot = -1 ;
+    for (int i = 0 ; i < 256 ; i++){
+        if (dat->running_transaction[i] == transaction_id){
+            slot = i ;
+            break ;
+        }
+    }
+    if (slot == -1){
+        return ;
+    }
+    int prev_lsn = dat->running_last_lsn[slot] ; 
     int record_size = records_sturct_size + 2 * max_size_for_data ;
     while ( len > 0 ){
         int seg_num = dat->current_segment ; 
@@ -549,6 +590,8 @@ void update_wal(int page_id , int offset , char *prev_data , int prev_len , char
                 seg_str.size = seg_str.size + data_we_put ;
                 dat->offset[seg_num] = seg_str.size ;
                 dat->last_lsn_in_segment[seg_num] = record.header.lsn ;
+                if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+                dat->running_last_lsn[slot] = record.header.lsn ;
                 declration = write_header(file_num , seg_str ) ; 
                 if ( declration == -1 ){
                     close(file_num) ;
@@ -600,6 +643,8 @@ void update_wal(int page_id , int offset , char *prev_data , int prev_len , char
                 seg_str.size = seg_str.size + data_we_put ;
                 dat->offset[seg_num] = seg_str.size ;
                 dat->last_lsn_in_segment[seg_num] = record.header.lsn ;
+                if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+                dat->running_last_lsn[slot] = record.header.lsn ;
                 declration = write_header(file_num , seg_str ) ; 
                 if ( declration == -1 ){
                     close(file_num) ;
@@ -607,7 +652,6 @@ void update_wal(int page_id , int offset , char *prev_data , int prev_len , char
                 }
                 len = len - step ;
             }
-            prev_lsn = -1 ; 
             prev_putted = 0 ; 
             updated_putted = 0 ; 
         }
@@ -639,4 +683,82 @@ void abort(){
     else {
         seg_num = dat->segment_num  ;
     }
+}
+
+
+void commit( int commit_the_transaction_id ){
+    int which_one = -1 ; 
+    for ( int i = 0 ; i < 256 ; i++ ){
+        if (dat->running_transaction[i] == commit_the_transaction_id ){
+            which_one = i ; 
+            break ; 
+        }
+    }
+    if (which_one == -1){
+        return ;
+    }
+    int prev_lsn = dat->running_last_lsn[which_one] ; 
+    int declration = 2 ;
+    int record_size = records_sturct_size ;
+    records_struct  record  ; 
+    default_record( &record , 4 , dat ) ; 
+    record.header.transaction = commit_the_transaction_id ;
+    record.header.lenght = 0 ;
+    record.header.prev = prev_lsn ;
+    record.crc = crc32c((char *)&record , 4 , records_sturct_size - 4) ; 
+
+    int seg_num = dat->current_segment ; 
+    int file_num ; 
+
+    file_num = create_segment_file(seg_num) ; 
+    if (file_num == -1  ){
+        return  ; 
+    }
+    segment_struct seg_str ;
+    int size_of_the_thing = pread(file_num, &seg_str, sizeof seg_str, 0);
+    if (size_of_the_thing != sizeof(seg_str) ){
+        default_segment(&seg_str , seg_num ) ; 
+    }
+    if (default_segment_size - seg_str.size < record_size){
+        close(file_num) ;
+        int next_seg_num = (seg_num + 1) % 256 ;
+        if (dat->last_lsn_in_segment[next_seg_num] >= dat->the_farthest_lsn_required){
+            checkpoint() ;
+            return ;            
+        }
+        dat->current_segment = next_seg_num ; 
+        seg_num = next_seg_num  ;
+        file_num = create_segment_file(seg_num) ;
+        if (file_num == -1){
+            return ;
+        }
+        default_segment(&seg_str , seg_num) ; 
+        dat->seq++ ; 
+        seg_str.seq = dat->seq ; 
+        seg_str.first_lsn = dat->lsn_num ; 
+        seg_str.records_offset = 0 ;
+        dat->offset[seg_num] = seg_str.size ;
+    }
+    seg_str.status = 1 ; 
+    declration = write_record(file_num , seg_str.size , record ) ;
+    if (declration == -1){
+        close(file_num) ;
+        return ;
+    }
+    seg_str.size = seg_str.size + records_sturct_size ;
+    dat->offset[seg_num] = seg_str.size ;
+    dat->last_lsn_in_segment[seg_num] = record.header.lsn ;
+    declration = write_header(file_num , seg_str ) ;
+    if (declration == -1){
+        close(file_num) ;
+        return ;
+    }
+    fsync(file_num) ;
+    close(file_num) ;
+
+    dat->running_transaction[which_one] = -1 ;
+    dat->running_first_lsn[which_one] = -1 ;
+    dat->running_last_lsn[which_one] = -1 ;
+    dat->num_of_run_transactions-- ;
+    update_farthest_lsn() ;
 }
