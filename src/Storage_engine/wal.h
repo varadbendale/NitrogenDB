@@ -2,6 +2,7 @@
 #include <errno.h>
 #define default_segment_size 16777216
 #define max_size_for_data 8192
+#define records_sturct_size 40 
 #include <stdint.h>
 #include <stddef.h>
 
@@ -33,9 +34,8 @@ typedef struct {
     int page_id ; 
     int offset ; 
     int updated_lenght ; 
-    char updated_data[max_size_for_data] ; 
     int prev_lenght ; 
-    char prev_data[max_size_for_data] ; 
+    char data[2 * max_size_for_data] ; 
 } update_info ; 
 
 typedef struct {
@@ -47,13 +47,13 @@ typedef struct {
 
 
 typedef struct {
-    uint32_t crc;
-    uint8_t type; // 1 for insert 2 for delete 3 for update 4 for abort 5 for commit 6 for checkpoint
+    uint32_t crc ;
+    uint8_t type ; // 1 for insert 2 for delete 3 for update 4 for abort 5 for commit 6 for checkpoint
     union {
-        insert_info insert;
-        update_info update;
+        insert_info insert ;
+        update_info update ;
         delete_info delete ;  
-        checkpoint_struct checkpoint;
+        checkpoint_struct checkpoint ;
     } record_value ;
     wal_page_header header;  
 } records_struct ;
@@ -64,6 +64,8 @@ typedef struct {
     int status ;  // 1 active 2 dead
     int size ; 
     int records_offset ; 
+    int first_lsn ; 
+    int seq ; 
 }segment_struct ; 
 
 
@@ -72,7 +74,11 @@ typedef struct {
     int transaction_num ; 
     int lsn_num ; 
     int num_of_run_transactions ; 
-    int running_transaction[max_size_for_data] ; 
-    int num_of_dead_segments ; 
-    int dead_segments[max_size_for_data] ; 
+    int running_transaction[256] ; 
+    int num_of_offset ; 
+    int offset[256] ; 
+    int current_segment ;     
+    int seq ;             
+    int last_lsn_in_segment[256] ;   
+    int the_farthest_lsn_required ; 
 }req_data ; 
