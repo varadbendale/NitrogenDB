@@ -677,6 +677,7 @@ void insert_wal(int transaction_id , int page_id , int offset , char *data ){
     if (slot == -1){
         return ;
     }
+    int prev_file_offset = dat->previous_offset[slot] ; 
     int prev_lsn = dat->running_last_lsn[slot] ;
     int record_size = records_sturct_size + max_size_for_data ;
     while ( len > 0 ){
@@ -728,8 +729,10 @@ void insert_wal(int transaction_id , int page_id , int offset , char *data ){
         record.insert.page_id = page_id ;
         record.insert.lenght = step ;
         record.header.prev = prev_lsn ;
+        record.header.prev_offset = prev_file_offset ;
         record.crc = crc32c((char *)&record , 4 , data_we_put - 4);
         prev_lsn = record.header.lsn ;
+
         declration = write_record(file_num , seg_str.size , record ) ;
         if (declration == -1  ){
             close(file_num) ;
@@ -737,6 +740,7 @@ void insert_wal(int transaction_id , int page_id , int offset , char *data ){
         }
         seg_str.size = seg_str.size + data_we_put ;
         dat->offset[seg_num] = seg_str.size ;
+        dat->previous_offset[slot] = seg_str.size + seg_num * max_size_for_data ;
         dat->last_lsn_in_segment[seg_num] = record.header.lsn ;
         if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
         dat->running_last_lsn[slot] = record.header.lsn ;
@@ -769,6 +773,7 @@ void delete_wal(int transaction_id , int page_id , int offset , char *data ){
         return ;
     }
     int prev_lsn = dat->running_last_lsn[slot] ;
+    int prev_file_offset = dat->previous_offset[slot] ; 
     int record_size = records_sturct_size + max_size_for_data ;
     while ( len > 0 ){
         int seg_num = dat->current_segment ;
@@ -819,6 +824,7 @@ void delete_wal(int transaction_id , int page_id , int offset , char *data ){
         record.delete.page_id = page_id ;
         record.delete.lenght = step ;
         record.header.prev = prev_lsn ;
+        record.header.prev_offset = prev_file_offset ;
         record.crc = crc32c((char *)&record , 4 , data_we_put - 4);
         prev_lsn = record.header.lsn ;
         declration = write_record(file_num , seg_str.size , record ) ;
@@ -831,6 +837,7 @@ void delete_wal(int transaction_id , int page_id , int offset , char *data ){
         dat->last_lsn_in_segment[seg_num] = record.header.lsn ;
         if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
         dat->running_last_lsn[slot] = record.header.lsn ;
+        dat->previous_offset[slot] = seg_str.size + seg_num * max_size_for_data ;
         declration = write_header(file_num , seg_str ) ;
         if ( declration == -1 ){
             close(file_num) ;
@@ -864,6 +871,7 @@ void update_wal(int transaction_id , int page_id , int offset , char *prev_data 
         return ;
     }
     int prev_lsn = dat->running_last_lsn[slot] ;
+    int prev_file_offset = dat->previous_offset[slot] ; 
     int record_size = records_sturct_size + 2 * max_size_for_data ;
     while ( len > 0 ){
         int seg_num = dat->current_segment ;
@@ -925,6 +933,7 @@ void update_wal(int transaction_id , int page_id , int offset , char *prev_data 
         record.update.prev_lenght = prev_chunk ;
         record.update.updated_lenght = updated_chunk ;
         record.header.prev = prev_lsn ;
+        record.header.prev_offset = prev_file_offset ;
         record.crc = crc32c((char *)&record , 4 , data_we_put - 4);
         prev_lsn = record.header.lsn ;
         declration = write_record(file_num , seg_str.size , record ) ;
@@ -935,6 +944,7 @@ void update_wal(int transaction_id , int page_id , int offset , char *prev_data 
         seg_str.size = seg_str.size + data_we_put ;
         dat->offset[seg_num] = seg_str.size ;
         dat->last_lsn_in_segment[seg_num] = record.header.lsn ;
+        dat->previous_offset[slot] = seg_str.size + seg_num * max_size_for_data ;
         if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
         dat->running_last_lsn[slot] = record.header.lsn ;
         declration = write_header(file_num , seg_str ) ;
@@ -1044,15 +1054,37 @@ void abort( int transaction_id ){
         return 
     }
     records_struct record ; 
-
+    default_record(&record , 4) ; 
+    int the_lsn_file = -1 ; 
+    for ( int i = 0 ; i < 256 ; i++ ){
+        if ( dat->running_first_lsn[i] <= lsn  && dat->running_last_lsn[i] >= lsn ){
+            int file_num = create_segment_file(i) ;
+            if (file_num == -1){
+                break ;
+            }
+            int size = sizeof(segment_struct) ;
+            while ( size < 4096){
+                pread(file_num , &record , records_sturct_size , size) ;       
+                if (record.header.lsn == lsn){
+                    pread(file_num , &record , records_sturct_size + record.header.lenght , size) ;   
+                    break ;
+                }
+                size = size + records_sturct_size + record.header.lenght ;     
+            }
+            close(file_num) ;
+            break ;
+        }
+    }
+    int first = 0 ; 
+    int offset_of_the_prev = -1 ; 
     while ( lsn != -1 ){
         int seg_num = dat->current_segment ; 
         int file_num ; 
-
         file_num = create_segment_file(seg_num) ; 
         if (file_num == -1  ){
             return  ; 
         }
+
         segment_struct seg_str ;
         int size_of_the_thing = pread(file_num, &seg_str, sizeof seg_str, 0);
         if (size_of_the_thing != sizeof(seg_str) ){
@@ -1079,10 +1111,82 @@ void abort( int transaction_id ){
             dat->offset[seg_num] = seg_str.size ;
         }
         seg_str.status = 1 ; 
-        
-        
 
-        lsn = record.header.prev 
+        int file_seg_num ; 
+        int offset_of_the_file ; 
+
+        if (offset_of_the_prev != -1 ){
+            file_seg_num = offset_of_the_prev / 4096  ; 
+            offset_of_the_file = offset_of_the_prev % 4096  ; 
+        }
+        if (first == 1 ){
+            default_record( &record , 4) ; 
+            file_num = create_segment_file(seg_num) ;
+            if (file_num == -1){
+                record.header.lsn = -1 ;
+                break ; 
+            }
+            int r = pread(file_num , &record , records_sturct_size , offset) ;
+            if (r != records_sturct_size){
+                record.header.lsn = -1 ;
+                close(file_num) ;
+                break ; 
+            }
+            pread(file_num , &record , records_sturct_size + record.header.lenght , offset) ;
+            close(file_num) ;
+        }
+
+        if (record.type == 1 ){
+            // delete(record) ; whole thing needs to be build up 
+        }
+        else if ( record.type == 2 ){
+            FSM_insert( record.record_value.delete.deleted_data , record.record_value.delete.page_num , record.record_value.delete.offset  ) ; 
+            records_struct put_struct ; 
+            put_struct.type = 4 ; 
+            put_struct.header.type = 1 ; 
+            int step = record.record_value.insert.lenght ;
+            int data_we_put = records_sturct_size + step ;
+            default_record( &put_struct , 4  ) ;
+            put_struct.header.transaction = transaction_id ;
+            memcpy(record.insert.inserted_data , data + data_putted , step );
+            data_putted = data_putted + step ;
+            put_struct.header.lenght = step ;
+            put_struct.insert.offset = record.record_value.delete.offset ;
+            put_struct.insert.page_id = record.record_value.delete.page_id ;
+            put_struct.insert.lenght = step ;
+            put_struct.header.prev_lsn = record.header.prev_lsn ; 
+            put_struct.header.prev_offset = record.header.prev_offset ;
+            put_struct.crc = crc32c((char *)&put_struct , 4 , data_we_put - 4);
+            prev_lsn = put_struct.header.lsn ;
+            declration = write_record(file_num , seg_str.size , put_struct ) ;
+            if (declration == -1  ){
+                close(file_num) ;
+                return  ;
+            }
+            seg_str.size = seg_str.size + data_we_put ;
+            dat->offset[seg_num] = seg_str.size ;
+            dat->previous_offset[slot] = seg_str.size + seg_num * max_size_for_data ;
+            dat->last_lsn_in_segment[seg_num] = put_struct.header.lsn ;
+            if (dat->running_first_lsn[slot] == -1){
+                dat->running_first_lsn[slot] = put_struct.header.lsn ;
+            }
+            dat->running_last_lsn[slot] = put_struct.header.lsn ;
+            declration = write_header(file_num , seg_str ) ;
+            if ( declration == -1 ){
+                close(file_num) ;
+                return  ;
+            }
+            len = len - step ;
+            fsync(file_num) ;
+            close(file_num) ;
+
+        }
+        else if ( record.type == 3 ){
+
+        }
+        first = 1 ; 
+        lsn = record.header.prev  ; 
+        offset_of_the_prev = record.header.prev_offset ; 
     }
 
 }
