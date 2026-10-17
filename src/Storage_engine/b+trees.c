@@ -22,7 +22,7 @@ void tree_func_for_insert(internal_node * node  , int pk , char * data , int pag
                 low = mid + 1 ; 
             }
             else if (pk ==  use_temp->primary_key[mid]  ){
-                return // error ; 
+                return ; 
             }
             else {
                 high = mid - 1 ; 
@@ -63,30 +63,14 @@ void tree_func_for_insert(internal_node * node  , int pk , char * data , int pag
         stack[k]->data[which_pos].page_id = page_id ; 
         stack[k]->data[which_pos].file_offset = offset ; 
         stack[k]->data[which_pos].slot_num = slot_num ; 
-        stack[k]->num_of_data_pushed = stack[k]->num_of_leaf ;
         stack[k]->num_of_leaf++ ; 
+        stack[k]->num_of_data_pushed = stack[k]->num_of_leaf ;
     }
 
     else { 
-        internal_node * temp_node ; 
-        int catch_which_to_put_as_parent = stack[k]->primary_key[stack[k]->num_of_leaf / 2] ;  ; 
+        int catch_which_to_put_as_parent = 0 ; 
         int lame = k -1  ; 
         while (lame >= 0 && stack[lame]->num_of_leaf == no_of_data ){
-            int low = stack_index[lame + 1] ;
-            for (int i = stack[lame]->num_of_leaf ; i > low ; i--) {
-                stack[lame]->primary_key[i] = stack[lame]->primary_key[i-1] ;
-            }
-            stack[lame]->primary_key[low] = catch_which_to_put_as_parent ; 
-            stack[lame]->num_of_leaf++ ;
-
-            for (int i = stack[lame]->num_of_children ; i > low + 1 ; i--) {
-                stack[lame]->children[i] = stack[lame]->children[i-1] ;
-            }
-
-            stack[lame]->children[low + 1] = NULL ;
-            stack[lame]->num_of_children++ ;
-            catch_which_to_put_as_parent = temp_catch_which_to_put_as_parent ; 
-
             lame--  ; 
         }
         internal_node * where_to_add = NULL ;
@@ -120,17 +104,6 @@ void tree_func_for_insert(internal_node * node  , int pk , char * data , int pag
                     greninja = the_emptier_one ; 
                     greninja_index = 0  ; 
                 }
-                for (int i = greninja->num_of_leaf ; i > greninja_index ; i--) {
-                    greninja->primary_key[i] = greninja->primary_key[i-1] ;
-                }
-                greninja->primary_key[greninja_index] = catch_which_to_put_as_parent ;    
-                greninja->num_of_leaf++ ; 
-                for (int i = greninja->num_of_children ; i > greninja_index + 1  ; i--) {
-                    greninja->children[i] = greninja->children[i-1] ;
-                }
-                greninja->children[greninja_index + 1] = NULL ;
-                greninja->num_of_children++ ;
-
                 where_to_add = greninja ;
                 index_thing = greninja_index + 1 ;
                 turner = 1 ; 
@@ -149,6 +122,7 @@ void tree_func_for_insert(internal_node * node  , int pk , char * data , int pag
             int for_the_temp = 0 ; 
             int tempacola = nadda->num_of_leaf / 2 ; 
             int skip_or_not = 0  ; 
+            catch_which_to_put_as_parent = nadda->primary_key[tempacola] ;
             if (nadda->leaf == false ){
                 for (int o = tempacola +1   ; o < nadda->num_of_leaf  ; o++ ){
                     tempo->primary_key[for_the_temp] = nadda->primary_key[o] ; 
@@ -164,19 +138,24 @@ void tree_func_for_insert(internal_node * node  , int pk , char * data , int pag
                 }
             }
 
-            
-            for (int o = tempacola  ; o < nadda->num_of_leaf  ; o++ ){
-                tempo->primary_key[for_the_temp] = nadda->primary_key[o] ; 
-                tempo->num_of_leaf++ ; 
-                for_the_temp++ ; 
-            }
             nadda->num_of_leaf = tempacola ;
             tempo->leaf = false ; 
+
+            for (int i = where_to_add->num_of_leaf ; i > index_thing - 1 ; i--) {
+                where_to_add->primary_key[i] = where_to_add->primary_key[i-1] ;
+            }
+            where_to_add->primary_key[index_thing - 1] = catch_which_to_put_as_parent ;
+            where_to_add->num_of_leaf++ ;
+            for (int i = where_to_add->num_of_children ; i > index_thing ; i--) {
+                where_to_add->children[i] = where_to_add->children[i-1] ;
+            }
+            where_to_add->children[index_thing] = tempo ;
+            where_to_add->num_of_children++ ;
 
             if ( nadda->leaf == false ){
                 tempacola = nadda->num_of_children / 2 ; 
                 for_the_temp = 0 ; 
-                for (int o = tempacola  ; o < nadda->num_of_children ; o++ ){
+                for (int o = tempacola + 1 ; o < nadda->num_of_children ; o++ ){
                     tempo->children[for_the_temp] = nadda->children[o] ; 
                     nadda->children[o] = NULL ;
                     tempo->num_of_children++ ; 
@@ -184,10 +163,8 @@ void tree_func_for_insert(internal_node * node  , int pk , char * data , int pag
                 }
                 nadda->num_of_children = tempacola + 1 ; 
 
-                where_to_add->children[index_thing] = tempo ;
-
-                int the_next_node_index_to_put = stack_index[kalos + 1] ;                              // FIX: position taken inside nadda is one level down
-                if (the_next_node_index_to_put + 1 <= tempacola){
+                int the_next_node_index_to_put = stack_index[kalos + 1] ;
+                if (the_next_node_index_to_put <= tempacola){
                     where_to_add = nadda ;
                     index_thing = the_next_node_index_to_put + 1 ;
                 }
@@ -213,8 +190,6 @@ void tree_func_for_insert(internal_node * node  , int pk , char * data , int pag
                 tempo->num_of_leaf = tempo->num_of_data_pushed ;
                 tempo->leaf = true ;
 
-
-                where_to_add->children[index_thing] = tempo ;
                 tempo->next = nadda->next ;
                 nadda->next = tempo ;
 
@@ -247,10 +222,10 @@ void tree_func_for_insert(internal_node * node  , int pk , char * data , int pag
                 }
                 return ; 
             }
-                    
-                }
         }
+    }
 }
+
      
 int validate_the_tree_data(internal_node *  root){
     while ( root->leaf != true ){
