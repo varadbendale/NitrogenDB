@@ -1,7 +1,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 #define default_segment_size 16777216
-#define max_size_for_data 8192
+#define max_size_for_data 4096
 #define records_sturct_size 40 
 #include <stdint.h>
 #include <stddef.h>
@@ -20,6 +20,7 @@ typedef struct {
     int lenght ; 
     int type ; 
     int prev ; 
+    int prev_offset ; 
     int transaction ; 
 } wal_page_header ; 
 
@@ -80,5 +81,8 @@ typedef struct {
     int current_segment ;     
     int seq ;             
     int last_lsn_in_segment[256] ;   
+    int running_first_lsn[256] ; 
+    int running_last_lsn[256] ;
     int the_farthest_lsn_required ; 
+    int previous_offset[256] ; 
 }req_data ; 
