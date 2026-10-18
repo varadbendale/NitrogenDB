@@ -1,93 +1,3 @@
-w#include <sys/stat.h>
-#include <errno.h>
-#define default_segment_size 16777216
-#define max_size_for_data 4096
-#define records_sturct_size 40 
-#include <stdint.h>
-#include <stddef.h>
-
-static uint32_t crc_table[256];
-
-typedef struct {
-    int page_id ; 
-    int offset ; 
-    int lenght ;  
-    char inserted_data[max_size_for_data] ; 
-} insert_info ;
-
-typedef struct {
-    int lsn ; 
-    int lenght ; 
-    int type ; 
-    int prev ; 
-    int prev_offset ; 
-    int transaction ; 
-} wal_page_header ; 
-
-typedef struct {
-    int page_id ; 
-    int offset ; 
-    int lenght ; 
-    char deleted_data[max_size_for_data] ; 
-} delete_info ; 
-
-typedef struct {
-    int page_id ; 
-    int offset ; 
-    int updated_lenght ; 
-    int prev_lenght ; 
-    char data[2 * max_size_for_data] ; 
-} update_info ; 
-
-typedef struct {
-    int transactions_number ; 
-    int running_transaction[max_size_for_data] ; 
-    int dirty_page_number ; 
-    int dirty_page_id[max_size_for_data] ; 
-} checkpoint_struct ; 
-
-
-typedef struct {
-    uint32_t crc ;
-    uint8_t type ; // 1 for insert 2 for delete 3 for update 4 for abort 5 for commit 6 for checkpoint
-    union {
-        insert_info insert ;
-        update_info update ;
-        delete_info delete ;  
-        checkpoint_struct checkpoint ;
-    } record_value ;
-    wal_page_header header;  
-} records_struct ;
-
-
-typedef struct {
-    int segment_id ; 
-    int status ;  // 1 active 2 dead
-    int size ; 
-    int records_offset ; 
-    int first_lsn ; 
-    int seq ; 
-}segment_struct ; 
-
-
-typedef struct {
-    int segment_num ; 
-    int transaction_num ; 
-    int lsn_num ; 
-    int num_of_run_transactions ; 
-    int running_transaction[256] ; 
-    int num_of_offset ; 
-    int offset[256] ; 
-    int current_segment ;     
-    int seq ;             
-    int last_lsn_in_segment[256] ;   
-    int running_first_lsn[256] ; 
-    int running_last_lsn[256] ;
-    int the_farthest_lsn_required ; 
-    int previous_offset[256] ; 
-}req_data ; 
- 
-
 int wal_folder(const char *path) {
     if (mkdir(path , 0755) == 0){
         return 0 ;
@@ -509,7 +419,7 @@ void commit( int commit_the_transaction_id ){
     int declration = 2 ;
     int record_size = records_sturct_size ;
     records_struct  record  ; 
-    default_record( &record , 4 , dat ) ; 
+    default_record( &record , 5  ) ; 
     record.header.transaction = commit_the_transaction_id ;
     record.header.lenght = 0 ;
     record.header.prev = prev_lsn ;
@@ -920,7 +830,7 @@ void checkpoint(){
     memset(&control , 0 , sizeof(control_struct)) ;
     control.checkpoint_lsn = record.header.lsn ;
     control.checkpoint_segment = seg_num ;
-    contro.checkpoint_offset = cp_offset ;
+    control.checkpoint_offset = cp_offset ;
     control.redo_lsn = dat->lsn_num  ;
 
     control->crc = crc32c((char *)control , 0 , offsetof(control_struct , crc)) ;
@@ -959,7 +869,65 @@ void checkpoint(){
 
 
 
+void recovery(){
+    control_struct  control ; 
+    memset(&control , 0 , sizeof(control_struct)) ;
+    read_control(control) ;
+    int keep_track = 0 ;  
+    int *the_undo_list ; 
+    int redo_offset = -1 ; 
+    int offset_of_the_file = -1  ; 
+    int first = 0 ; 
+    for ( int i = control->redo_lsn ; i < dat->lsn_num   ; i++ ){
+        record_struct record ; 
+        default_record(&record , 10 ) ; 
+        int temp_file_num = create_segment_file( i % 256  ) ;
+        if (temp_file_num == -1){
+            break ; 
+        }
+        if (offset_of_the_file == -1 ){
+            offset_of_the_file = sizeof(segment_struct) ;
+            while ( size < 4096){
+                pread(file_num , &record , records_sturct_size , offset_of_the_file) ;       
+                if (record.header.lsn == dat->redo_lsn ){
+                    pread(file_num , &record , records_sturct_size + record.header.lenght , offset_of_the_file) ;   
+                    break ;
+                }
+                offset_of_the_file = offset_of_the_file + records_sturct_size + record.header.lenght ;     
+            }
+        }
+        if (record.type == 1 || record.type == 7  ){
+            //insert stuff  ; 
+        }
+        else if (record.type == 2 || record.type == 8 ){
+            // delete stuff. ; 
+        }
+        else if (record.type == 3 || record.type == 9){
+            // update stuff  ;  
+        }
+        else if (record.type == 5 ){
+            the_undo_list[keep_track++]  = record.header.lsn ; 
+        }
+        else if (record.type == 6 ){
+            
+        }
 
+        int numes = pread(temp_file_num , &record , records_sturct_size , offset_of_the_file) ;
+        if (numes != records_sturct_size){
+            record.header.lsn = -1 ;
+            close(temp_file_num) ;
+            break ; 
+        }
+        offset_of_the_file = offset_of_the_file + records_sturct_size + record.header.lenght ; 
+        pread(temp_file_num , &record , records_sturct_size + record.header.lenght , offset_of_the_file) ;
+        close(temp_file_num) ;
+
+    }
+
+    for ( int i = 0 ; i < keep_track ; i++){
+        
+    }
+}
 
 
 
