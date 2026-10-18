@@ -1,4 +1,4 @@
-#include <sys/stat.h>
+w#include <sys/stat.h>
 #include <errno.h>
 #define default_segment_size 16777216
 #define max_size_for_data 4096
@@ -59,6 +59,14 @@ typedef struct {
     wal_page_header header;  
 } records_struct ;
 
+typedef struct {
+    int checkpoint_lsn ;  
+    int checkpoint_segment ; 
+    int checkpoint_offset ; 
+    int redo_lsn ;      
+    uint32_t crc ;            
+} control_struct ;
+
 
 typedef struct {
     int segment_id ; 
@@ -79,10 +87,14 @@ typedef struct {
     int num_of_offset ; 
     int offset[256] ; 
     int current_segment ;     
-    int seq ;             
+    int redo_checkpoint ; 
+    int seq ; 
+    int checkpoint_running = 0 ;             
     int last_lsn_in_segment[256] ;   
     int running_first_lsn[256] ; 
     int running_last_lsn[256] ;
     int the_farthest_lsn_required ; 
     int previous_offset[256] ; 
+    frames * checkpoint_frames ; 
+    int data_fd  ;  
 }req_data ; 
