@@ -474,7 +474,7 @@ void commit( int commit_the_transaction_id ){
     }
     fsync(file_num) ;
     close(file_num) ;
-
+    write_end_record(which_one) ;  
     dat->running_transaction[which_one] = -1 ;
     dat->running_first_lsn[which_one] = -1 ;
     dat->running_last_lsn[which_one] = -1 ;
@@ -717,7 +717,7 @@ void abort( int transaction_id ){
         lsn = record.header.prev_lsn  ; 
         offset_of_the_prev = record.header.prev_offset ; 
     }
-
+    write_end_record(slot) ;
     int j = slot ;
     while ( j < dat->num_of_run_transactions - 1 ){
         dat->running_transaction[j] = dat->running_transaction[j + 1] ;
@@ -746,6 +746,75 @@ int read_control(control_struct * c){
     return 0 ;
 }
 
+int write_end_record(int slot){
+    records_struct put_struct ;
+    default_record(&put_struct , 10) ;                      
+    put_struct.header.transaction = slot ;                  
+    put_struct.header.prev_lsn = dat->running_last_lsn[slot] ;
+    put_struct.header.prev_offset = dat->previous_offset[slot] ;
+
+    int seg_num = dat->current_segment ;
+    int file_num = create_segment_file(seg_num) ;
+    if (file_num == -1){
+        return -1 ;
+    }
+    segment_struct seg_str ;
+    int size_of_the_thing = pread(file_num, &seg_str, sizeof seg_str, 0);
+    if (size_of_the_thing != sizeof(seg_str) ){
+        default_segment(&seg_str , seg_num ) ;
+    }
+    if (default_segment_size - seg_str.size < records_sturct_size){
+        close(file_num) ;
+        int next_seg_num = (seg_num + 1) % 256 ;
+        if (dat->last_lsn_in_segment[next_seg_num] >= dat->the_farthest_lsn_required){
+            checkpoint() ;
+            return -1 ;
+        }
+        dat->current_segment = next_seg_num ;
+        seg_num = next_seg_num ;
+        file_num = create_segment_file(seg_num) ;
+        if (file_num == -1){
+            return -1 ;
+        }
+        default_segment(&seg_str , seg_num) ;
+        dat->seq++ ;
+        seg_str.seq = dat->seq ;
+        seg_str.first_lsn = put_struct.header.lsn ;
+        seg_str.records_offset = 0 ;
+    }
+    seg_str.status = 1 ;
+
+    int data_we_put = records_sturct_size + put_struct.header.lenght ;
+    put_struct.crc = crc32c((char *)&put_struct , 4 , data_we_put - 4);
+    int declration = write_record(file_num , seg_str.size , put_struct ) ;
+    if (declration == -1){
+        close(file_num) ;
+        return -1 ;
+    }
+    seg_str.size = seg_str.size + data_we_put ;
+    dat->offset[seg_num] = seg_str.size ;
+    dat->last_lsn_in_segment[seg_num] = put_struct.header.lsn ;
+    declration = write_header(file_num , seg_str ) ;
+    if (declration == -1){
+        close(file_num) ;
+        return -1 ;
+    }
+    fsync(file_num) ;
+    close(file_num) ;
+
+    dat->running_first_lsn[slot] = -1 ;
+    dat->running_last_lsn[slot] = -1 ;
+    dat->previous_offset[slot] = -1 ;
+
+    int oldest = dat->lsn_num ;
+    for (int k = 0 ; k < 256 ; k++){
+        if (dat->running_first_lsn[k] != -1 && dat->running_first_lsn[k] < oldest){
+            oldest = dat->running_first_lsn[k] ;
+        }
+    }
+    dat->the_farthest_lsn_required = oldest ;
+    return 0 ;
+}
 
 
 void checkpoint(){
@@ -959,6 +1028,10 @@ void recovery(){
         else if (record.type == 6 ){
             just_in_case = 1 ; 
         }
+        else if (record.type == 10 ){
+            just_in_case = 1 ;
+            the_undo_list[ record.header.transaction % 256 ] = -1 ;
+        }
         if (just_in_case == 0 ){
             the_undo_list[ keep_track % 256 ]  = record.header.lsn  ; 
             keep_track++ ; 
@@ -1165,6 +1238,7 @@ void recovery(){
                     lsn = record.header.prev_lsn  ; 
                     offset_of_the_prev = record.header.prev_offset ; 
                 }
+                write_end_record(j) ; 
                 the_undo_list[j] = -1 ;  
         } 
         j++ ; 
@@ -1191,5 +1265,562 @@ void recovery(){
 
 
 
+
+
+// void insert_wal(int transaction_id , int page_id , int offset , char *data ){
+//     int len = strlen(data)  ;
+//     int data_putted  = 0 ;  
+//     records_struct record ; 
+//     int declration = 2 ;  
+//     int slot = -1 ;
+//     for (int i = 0 ; i < 256 ; i++){
+//         if (dat->running_transaction[i] == transaction_id){
+//             slot = i ;
+//             break ;
+//         }
+//     }
+//     if (slot == -1){
+//         return ;
+//     }
+//     int prev_lsn = dat->running_last_lsn[slot] ; 
+//     int record_size = records_sturct_size + max_size_for_data ; 
+//     while ( len > 0 ){
+//         int seg_num = dat->current_segment ; 
+//         int file_num ; 
+
+//         file_num = create_segment_file(seg_num) ; 
+//         if (file_num == -1  ){
+//             return  ; 
+//         }
+//         segment_struct seg_str ;
+//         int size_of_the_thing = pread(file_num, &seg_str, sizeof seg_str, 0);
+//         if (size_of_the_thing != sizeof(seg_str) ){
+//             default_segment(&seg_str , seg_num ) ; 
+//         }
+        
+//         if (default_segment_size - seg_str.size < record_size){
+//             close(file_num) ;
+//             int next_seg_num = (seg_num + 1) % 256 ;
+//             if (dat->last_lsn_in_segment[next_seg_num] >= dat->the_farthest_lsn_required){
+//                 checkpoint() ;
+//                 return ;            
+//             }
+//             dat->current_segment = next_seg_num ; 
+//             seg_num = next_seg_num  ;
+//             file_num = create_segment_file(seg_num) ;
+//             if (file_num == -1){
+//                 return ;
+//             }
+//             default_segment(&seg_str , seg_num) ; 
+//             dat->seq++ ; 
+//             seg_str.seq = dat->seq ; 
+//             seg_str.first_lsn = dat->lsn_num ; 
+//             seg_str.records_offset = 0 ;
+//             dat->offset[seg_num] = seg_str.size ;
+//         }
+//         seg_str.status = 1 ; 
+//         int space = default_segment_size - seg_str.size ;
+//         int num = (space / record_size) * max_size_for_data ; 
+//         if (len >= num ){
+//             len = len - num ; 
+//             while ( num > 0 ){
+//                 default_record( &record , 1  , dat ) ;
+//                 record.header.transaction = transaction_id ;
+//                 if (num >= max_size_for_data){
+//                     int data_we_put = records_sturct_size + max_size_for_data ;
+//                     memcpy(record.insert.inserted_data , data + data_putted , max_size_for_data );
+//                     data_putted = data_putted + max_size_for_data ; 
+//                     record.header.lenght = max_size_for_data ; 
+//                     record.insert.offset = offset ; 
+//                     record.insert.page_id = page_id ; 
+//                     record.insert.lenght = max_size_for_data ;  
+//                     record.header.prev = prev_lsn ; 
+//                     record.crc = crc32c((char *)&record , 4 , data_we_put - 4);
+//                     prev_lsn = record.header.lsn ; 
+//                     declration = write_record(file_num , seg_str.size , record ) ; 
+//                     if (declration == -1  ){
+//                         close(file_num) ;
+//                         return  ; 
+//                     }
+//                     seg_str.size = seg_str.size + data_we_put ;
+//                     dat->offset[seg_num] = seg_str.size ;
+//                     dat->last_lsn_in_segment[seg_num] = record.header.lsn ;
+//                     if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+//                     dat->running_last_lsn[slot] = record.header.lsn ;
+//                     declration = write_header(file_num , seg_str ) ; 
+//                     if ( declration == -1 ){
+//                         close(file_num) ;
+//                         return  ; 
+//                     }
+//                     num  = num - max_size_for_data ;
+//                 }
+//                 else { 
+//                     int data_we_put = records_sturct_size + num ;
+//                     memcpy(record.insert.inserted_data , data + data_putted , num );
+//                     data_putted = data_putted + num ;  
+//                     record.header.lenght = num ; 
+//                     record.insert.offset = offset ; 
+//                     record.insert.page_id = page_id ; 
+//                     record.insert.lenght = num ;  
+//                     record.header.prev = prev_lsn ;
+//                     record.crc = crc32c((char *)&record , 4 , data_we_put - 4);
+//                     declration = write_record(file_num , seg_str.size , record ) ; 
+//                     if (declration == -1  ){
+//                         close(file_num) ;
+//                         return  ; 
+//                     }
+//                     prev_lsn = record.header.lsn ; 
+//                     seg_str.size = seg_str.size + data_we_put  ;
+//                     dat->offset[seg_num] = seg_str.size ;
+//                     dat->last_lsn_in_segment[seg_num] = record.header.lsn ; 
+//                     if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+//                     dat->running_last_lsn[slot] = record.header.lsn ;
+//                     declration = write_header(file_num , seg_str ) ; 
+//                     if ( declration == -1 ){
+//                         close(file_num) ;
+//                         return  ; 
+//                     }
+//                     num  = 0  ;
+//                 }
+//             }
+//             seg_str.records_offset = seg_str.records_offset + seg_str.size ; 
+//             declration = write_header(file_num , seg_str ) ; 
+//             if ( declration == -1 ){
+//                 close(file_num) ;   
+//                 return  ; 
+//             }
+//         }
+//         else {  
+//             while ( len > 0 ){
+//                 default_record( &record ,  1  , dat ) ; 
+//                 record.header.transaction = transaction_id ;  
+//                 if (len >= max_size_for_data){
+//                     int data_we_put = records_sturct_size + max_size_for_data ;
+//                     memcpy(record.insert.inserted_data , data + data_putted , max_size_for_data );
+//                     data_putted = data_putted + max_size_for_data ; 
+//                     record.header.lenght = max_size_for_data ; 
+//                     record.insert.offset = offset ; 
+//                     record.insert.page_id = page_id ; 
+//                     record.insert.lenght = max_size_for_data ;  
+//                     record.header.prev = prev_lsn ; 
+//                     record.crc = crc32c((char *)&record , 4 , data_we_put - 4);
+//                     prev_lsn = record.header.lsn ; 
+//                     declration = write_record(file_num , seg_str.size , record ) ; 
+//                     if (declration == -1  ){
+//                         close(file_num) ;
+//                         return  ; 
+//                     }
+//                     seg_str.size = seg_str.size + data_we_put ;
+//                     dat->offset[seg_num] = seg_str.size ;
+//                     dat->last_lsn_in_segment[seg_num] = record.header.lsn ; 
+//                     if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+//                     dat->running_last_lsn[slot] = record.header.lsn ;
+//                     declration = write_header(file_num , seg_str ) ; 
+//                     if ( declration == -1 ){
+//                         close(file_num) ;
+//                         return  ; 
+//                     }
+//                     len  = len - max_size_for_data ;
+//                 }
+//                 else { 
+//                     int data_we_put = records_sturct_size + len ; 
+//                     memcpy(record.insert.inserted_data , data + data_putted , len );
+//                     data_putted = data_putted + len ;  
+//                     record.header.lenght = len ; 
+//                     record.insert.offset = offset ; 
+//                     record.insert.page_id = page_id ; 
+//                     record.insert.lenght = len ;  
+//                     record.header.prev = prev_lsn ; 
+//                     record.crc = crc32c((char *)&record , 4 , data_we_put - 4) ;
+//                     declration = write_record(file_num , seg_str.size , record ) ; 
+//                     if (declration == -1  ){
+//                         close(file_num) ;
+//                         return  ; 
+//                     }
+//                     prev_lsn = record.header.lsn ; 
+//                     seg_str.size = seg_str.size + data_we_put ;
+//                     dat->offset[seg_num] = seg_str.size ;
+//                     dat->last_lsn_in_segment[seg_num] = record.header.lsn ; 
+//                     if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+//                     dat->running_last_lsn[slot] = record.header.lsn ;
+//                     declration = write_header(file_num , seg_str ) ; 
+//                     if ( declration == -1 ){
+//                         close(file_num) ;
+//                         return  ; 
+//                     }
+//                     len  = 0  ;
+//                 }
+//             }
+//             data_putted = 0 ; 
+//         }
+//         fsync(file_num) ;
+//         close(file_num) ;
+
+//     }
+//     return ; 
+// }
+
+
+// void delete_wal(int transaction_id , int page_id , int offset , char *data ){
+//     int len = strlen(data)  ;
+//     int data_putted  = 0 ;  
+//     records_struct record ; 
+//     int declration = 2 ;  
+//     int slot = -1 ;
+//     for (int i = 0 ; i < 256 ; i++){
+//         if (dat->running_transaction[i] == transaction_id){
+//             slot = i ;
+//             break ;
+//         }
+//     }
+//     if (slot == -1){
+//         return ;
+//     }
+//     int prev_lsn = dat->running_last_lsn[slot] ; 
+//     int record_size = records_sturct_size + max_size_for_data ; 
+//     while ( len > 0 ){
+//         int seg_num = dat->current_segment ; 
+//         int file_num ; 
+
+//         file_num = create_segment_file(seg_num) ; 
+//         if (file_num == -1  ){
+//             return  ; 
+//         }
+//         segment_struct seg_str ;
+//         int size_of_the_thing = pread(file_num, &seg_str, sizeof seg_str, 0);
+//         if (size_of_the_thing != sizeof(seg_str) ){
+//             default_segment(&seg_str , seg_num ) ; 
+//         }
+
+//         if (default_segment_size - seg_str.size < record_size){
+//             close(file_num) ;
+//             int next_seg_num = (seg_num + 1) % 256 ;
+//             if (dat->last_lsn_in_segment[next_seg_num] >= dat->the_farthest_lsn_required){
+//                 checkpoint() ;
+//                 return ;            
+//             }
+//             dat->current_segment = next_seg_num ; 
+//             seg_num = next_seg_num  ;
+//             file_num = create_segment_file(seg_num) ;
+//             if (file_num == -1){
+//                 return ;
+//             }
+//             default_segment(&seg_str , seg_num) ; 
+//             seg_str.seq = ++dat->seq ; 
+//             seg_str.first_lsn = dat->lsn_num ; 
+//             seg_str.records_offset = 0 ;
+//             dat->offset[seg_num] = seg_str.size ;
+//         }
+//         seg_str.status = 1 ; 
+
+//         int space = default_segment_size - seg_str.size ;
+//         int num = (space / record_size) * max_size_for_data ; 
+//         if (len >= num ){
+//             len = len - num ; 
+//             while ( num > 0 ){
+//                 default_record( &record , 2  , dat ) ;
+//                 record.header.transaction = transaction_id ;
+//                 if (num >= max_size_for_data){
+//                     int data_we_put = records_sturct_size + max_size_for_data ;
+//                     memcpy(record.delete.deleted_data , data + data_putted , max_size_for_data );
+//                     data_putted = data_putted + max_size_for_data ; 
+//                     record.header.lenght = max_size_for_data ; 
+//                     record.delete.offset = offset ; 
+//                     record.delete.page_id = page_id ; 
+//                     record.delete.lenght = max_size_for_data ;  
+//                     record.header.prev = prev_lsn ; 
+//                     record.crc = crc32c((char *)&record , 4 , data_we_put - 4);
+//                     prev_lsn = record.header.lsn ; 
+//                     declration = write_record(file_num , seg_str.size , record ) ; 
+//                     if (declration == -1  ){
+//                         close(file_num) ;
+//                         return  ; 
+//                     }
+//                     seg_str.size = seg_str.size + data_we_put ;
+//                     dat->offset[seg_num] = seg_str.size ;
+//                     dat->last_lsn_in_segment[seg_num] = record.header.lsn ;
+//                     if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+//                     dat->running_last_lsn[slot] = record.header.lsn ;
+//                     declration = write_header(file_num , seg_str ) ; 
+//                     if ( declration == -1 ){
+//                         close(file_num) ;
+//                         return  ; 
+//                     }
+//                     num  = num - max_size_for_data ;
+//                 }
+//                 else { 
+//                     int data_we_put = records_sturct_size + num ;
+//                     memcpy(record.delete.deleted_data , data + data_putted , num );
+//                     data_putted = data_putted + num ;  
+//                     record.header.lenght = num ; 
+//                     record.delete.offset = offset ; 
+//                     record.delete.page_id = page_id ; 
+//                     record.delete.lenght = num ;  
+//                     record.header.prev = prev_lsn ;
+//                     record.crc = crc32c((char *)&record , 4 , data_we_put - 4);
+//                     declration = write_record(file_num , seg_str.size , record ) ; 
+//                     if (declration == -1  ){
+//                         close(file_num) ;
+//                         return  ; 
+//                     }
+//                     prev_lsn = record.header.lsn ; 
+//                     seg_str.size = seg_str.size + data_we_put  ;
+//                     dat->offset[seg_num] = seg_str.size ;
+//                     dat->last_lsn_in_segment[seg_num] = record.header.lsn ; 
+//                     if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+//                     dat->running_last_lsn[slot] = record.header.lsn ;
+//                     declration = write_header(file_num , seg_str ) ; 
+//                     if ( declration == -1 ){
+//                         close(file_num) ;
+//                         return  ; 
+//                     }
+//                     num  = 0  ;
+//                 }
+//             }
+//             seg_str.records_offset = seg_str.records_offset + seg_str.size ; 
+//             declration = write_header(file_num , seg_str ) ; 
+//             if ( declration == -1 ){
+//                 close(file_num) ;
+//                 return  ; 
+//             }
+//         }
+//         else {  
+//             while ( len > 0 ){
+//                 default_record( &record , 2  , dat ) ; 
+//                 record.header.transaction = transaction_id ;
+//                 if (len >= max_size_for_data){
+//                     int data_we_put = records_sturct_size + max_size_for_data ;
+//                     memcpy(record.delete.deleted_data , data + data_putted , max_size_for_data );
+//                     data_putted = data_putted + max_size_for_data ; 
+//                     record.header.lenght = max_size_for_data ; 
+//                     record.delete.offset = offset ; 
+//                     record.delete.page_id = page_id ; 
+//                     record.delete.lenght = max_size_for_data ;  
+//                     record.header.prev = prev_lsn ; 
+//                     record.crc = crc32c((char *)&record , 4 , data_we_put - 4);
+//                     prev_lsn = record.header.lsn ; 
+//                     declration = write_record(file_num , seg_str.size , record ) ; 
+//                     if (declration == -1  ){
+//                         close(file_num) ;
+//                         return  ; 
+//                     }
+//                     seg_str.size = seg_str.size + data_we_put ;
+//                     dat->offset[seg_num] = seg_str.size ;
+//                     dat->last_lsn_in_segment[seg_num] = record.header.lsn ; 
+//                     if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+//                     dat->running_last_lsn[slot] = record.header.lsn ;
+//                     declration = write_header(file_num , seg_str ) ; 
+//                     if ( declration == -1 ){
+//                         close(file_num) ;
+//                         return  ; 
+//                     }
+//                     len  = len - max_size_for_data ;
+//                 }
+//                 else { 
+//                     int data_we_put = records_sturct_size + len ;
+//                     memcpy(record.delete.deleted_data , data + data_putted , len );
+//                     data_putted = data_putted + len ;  
+//                     record.header.lenght = len ; 
+//                     record.delete.offset = offset ; 
+//                     record.delete.page_id = page_id ; 
+//                     record.delete.lenght = len ;  
+//                     record.header.prev = prev_lsn ; 
+//                     record.crc = crc32c((char *)&record , 4 , data_we_put - 4);
+//                     declration = write_record(file_num , seg_str.size , record ) ; 
+//                     if (declration == -1  ){
+//                         close(file_num) ;
+//                         return  ; 
+//                     }
+//                     prev_lsn = record.header.lsn ; 
+//                     seg_str.size = seg_str.size + data_we_put ;
+//                     dat->offset[seg_num] = seg_str.size ;
+//                     dat->last_lsn_in_segment[seg_num] = record.header.lsn ; 
+//                     if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+//                     dat->running_last_lsn[slot] = record.header.lsn ;
+//                     declration = write_header(file_num , seg_str ) ; 
+//                     if ( declration == -1 ){
+//                         close(file_num) ;
+//                         return  ; 
+//                     }
+//                     len  = 0  ;
+//                 }
+//             }
+//             data_putted = 0 ; 
+//         }
+//         fsync(file_num) ;
+//         close(file_num) ;
+
+//     }
+//     return ; 
+// }
+
+
+// void update_wal(int transaction_id , int page_id , int offset , char *prev_data , int prev_len , char *updated_data , int updated_len ){
+//     int len = prev_len ;
+//     if (updated_len > prev_len ){
+//         len = updated_len ;
+//     }
+//     int prev_putted = 0 ;
+//     int updated_putted = 0 ;
+//     records_struct record ; 
+//     int declration = 2 ;  
+//     int slot = -1 ;
+//     for (int i = 0 ; i < 256 ; i++){
+//         if (dat->running_transaction[i] == transaction_id){
+//             slot = i ;
+//             break ;
+//         }
+//     }
+//     if (slot == -1){
+//         return ;
+//     }
+//     int prev_lsn = dat->running_last_lsn[slot] ; 
+//     int record_size = records_sturct_size + 2 * max_size_for_data ;
+//     while ( len > 0 ){
+//         int seg_num = dat->current_segment ; 
+//         int file_num ; 
+
+//         file_num = create_segment_file(seg_num) ; 
+//         if (file_num == -1  ){
+//             return  ; 
+//         }
+//         segment_struct seg_str ;
+//         int size_of_the_thing = pread(file_num, &seg_str, sizeof seg_str, 0);
+//         if (size_of_the_thing != sizeof(seg_str) ){
+//             default_segment(&seg_str , seg_num ) ; 
+//         }
+
+//         if (default_segment_size - seg_str.size < record_size){
+//             close(file_num) ;
+//             int next_seg_num = (seg_num + 1) % 256 ;
+//             if (dat->last_lsn_in_segment[next_seg_num] >= dat->the_farthest_lsn_required){
+//                 checkpoint() ;
+//                 return ;            
+//             }
+//             dat->current_segment = next_seg_num ; 
+//             seg_num = next_seg_num  ;
+//             file_num = create_segment_file(seg_num) ;
+//             if (file_num == -1){
+//                 return ;
+//             }
+//             default_segment(&seg_str , seg_num) ; 
+//             seg_str.seq = ++dat->seq ; 
+//             seg_str.first_lsn = dat->lsn_num ; 
+//             seg_str.records_offset = 0 ;
+//             dat->offset[seg_num] = seg_str.size ;
+//         }
+//         seg_str.status = 1 ; 
+
+//         int space = default_segment_size - seg_str.size ;
+//         int num = (space / record_size) * max_size_for_data ; 
+//         if (len >= num ){
+//             len = len - num ; 
+//             while ( num > 0 ){
+//                 int step = max_size_for_data ;
+//                 if (num < max_size_for_data){
+//                     step = num ;
+//                 }
+//                 int prev_chunk = prev_len - prev_putted ;
+//                 if (prev_chunk > step){
+//                     prev_chunk = step ;
+//                 }
+//                 int updated_chunk = updated_len - updated_putted ;
+//                 if (updated_chunk > step){
+//                     updated_chunk = step ;
+//                 }
+//                 int data_we_put = records_sturct_size + prev_chunk + updated_chunk ;
+//                 default_record( &record , 3  , dat ) ;
+//                 record.header.transaction = transaction_id ;
+//                 memcpy(record.update.data , prev_data + prev_putted , prev_chunk );
+//                 memcpy(record.update.data + prev_chunk , updated_data + updated_putted , updated_chunk );
+//                 prev_putted = prev_putted + prev_chunk ; 
+//                 updated_putted = updated_putted + updated_chunk ; 
+//                 record.header.lenght = prev_chunk + updated_chunk ; 
+//                 record.update.offset = offset ; 
+//                 record.update.page_id = page_id ; 
+//                 record.update.prev_lenght = prev_chunk ;  
+//                 record.update.updated_lenght = updated_chunk ;  
+//                 record.header.prev = prev_lsn ; 
+//                 record.crc = crc32c((char *)&record , 4 , data_we_put - 4);
+//                 prev_lsn = record.header.lsn ; 
+//                 declration = write_record(file_num , seg_str.size , record ) ; 
+//                 if (declration == -1  ){
+//                     close(file_num) ;
+//                     return  ; 
+//                 }
+//                 seg_str.size = seg_str.size + data_we_put ;
+//                 dat->offset[seg_num] = seg_str.size ;
+//                 dat->last_lsn_in_segment[seg_num] = record.header.lsn ;
+//                 if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+//                 dat->running_last_lsn[slot] = record.header.lsn ;
+//                 declration = write_header(file_num , seg_str ) ; 
+//                 if ( declration == -1 ){
+//                     close(file_num) ;
+//                     return  ; 
+//                 }
+//                 num  = num - step ;
+//             }
+//             seg_str.records_offset = seg_str.records_offset + seg_str.size ; 
+//             declration = write_header(file_num , seg_str ) ; 
+//             if ( declration == -1 ){
+//                 close(file_num) ;
+//                 return  ; 
+//             }
+//         }
+//         else {  
+//             while ( len > 0 ){
+//                 int step = max_size_for_data ;
+//                 if (len < max_size_for_data){
+//                     step = len ;
+//                 }
+//                 int prev_chunk = prev_len - prev_putted ;
+//                 if (prev_chunk > step){
+//                     prev_chunk = step ;
+//                 }
+//                 int updated_chunk = updated_len - updated_putted ;
+//                 if (updated_chunk > step){
+//                     updated_chunk = step ;
+//                 }
+//                 int data_we_put = records_sturct_size + prev_chunk + updated_chunk ;
+//                 default_record( &record , 3  , dat ) ;
+//                 record.header.transaction = transaction_id ;
+//                 memcpy(record.update.data , prev_data + prev_putted , prev_chunk );
+//                 memcpy(record.update.data + prev_chunk , updated_data + updated_putted , updated_chunk );
+//                 prev_putted = prev_putted + prev_chunk ; 
+//                 updated_putted = updated_putted + updated_chunk ; 
+//                 record.header.lenght = prev_chunk + updated_chunk ; 
+//                 record.update.offset = offset ; 
+//                 record.update.page_id = page_id ; 
+//                 record.update.prev_lenght = prev_chunk ;  
+//                 record.update.updated_lenght = updated_chunk ;  
+//                 record.header.prev = prev_lsn ; 
+//                 record.crc = crc32c((char *)&record , 4 , data_we_put - 4);
+//                 prev_lsn = record.header.lsn ; 
+//                 declration = write_record(file_num , seg_str.size , record ) ; 
+//                 if (declration == -1  ){
+//                     close(file_num) ;
+//                     return  ; 
+//                 }
+//                 seg_str.size = seg_str.size + data_we_put ;
+//                 dat->offset[seg_num] = seg_str.size ;
+//                 dat->last_lsn_in_segment[seg_num] = record.header.lsn ;
+//                 if (dat->running_first_lsn[slot] == -1) dat->running_first_lsn[slot] = record.header.lsn ;
+//                 dat->running_last_lsn[slot] = record.header.lsn ;
+//                 declration = write_header(file_num , seg_str ) ; 
+//                 if ( declration == -1 ){
+//                     close(file_num) ;
+//                     return  ; 
+//                 }
+//                 len = len - step ;
+//             }
+//             prev_putted = 0 ; 
+//             updated_putted = 0 ; 
+//         }
+//         fsync(file_num) ;
+//         close(file_num) ;
+
+//     }
+//     return ; 
+// }
 
 
