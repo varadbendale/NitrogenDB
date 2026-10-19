@@ -1,4 +1,4 @@
-w#include <sys/stat.h>
+#include <sys/stat.h>
 #include <errno.h>
 #define default_segment_size 16777216
 #define max_size_for_data 4096
