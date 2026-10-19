@@ -1,3 +1,6 @@
+#ifndef TYPES_H
+#define TYPES_H
+
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdint.h>
@@ -5,17 +8,25 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <pthread.h>
+#include <limits.h>
+#include <time.h>
 
-#define page_size 4096 
+#define page_size 4096
+#define PAGE_SIZE page_size
+#define INVALID_PAGE_ID 0xFFFFFFFFu
 
-enum page_types{
-    toast = 120 ,
-    normal , 
+enum page_types {
+    toast_page = 120,
+    normal,
     hash
-} ; 
+};
 
-#define use_page_size  2752  ; 
+enum frame_request {
+    force = 1
+};
 
+#define use_page_size 2736
 #define max_no_of_slots 100
 #define data_size (page_size - sizeof(page_header_struct) - (sizeof(slots) * max_no_of_slots))
 
@@ -50,145 +61,100 @@ typedef struct {
     table_info tables[300];
 } pagezero;
 
-
 typedef struct {
-    int hash[307] ; 
-    int num ; 
-    int primary_key[307] ; 
-    int pri_num ; 
-}info  ; 
+    int hash[307];
+    int num;
+    int primary_key[307];
+    int pri_num;
+} info;
 
+typedef struct acutal_values {
+    int error_handling;
+    char **info;
+    itree *condition;
+} acutal_values;
 
+typedef struct info_detail {
+    char *table;
+    int row_num;
+    acutal_values **info;
+} info_detail;
 
-typedef struct acutal_values{
-    int error_handling  ; 
-    char ** info ; 
-    itree * condition ; 
-}acutal_values ;
-
-
-typedef struct info_detail{
-    char * table ; 
-    int row_num ; 
-    acutal_values **info  ; 
-}info_detail ;
-
-
-typedef struct insert{
-    int table_num ; 
-    info_detail ** info ; 
-}insert ;
+typedef struct insert_page {
+    int table_num;
+    info_detail **info;
+} insert_page;
 
 typedef struct page_header_struct {
-    uint32_t page_num ; 
-    int page_type ; 
-    int num ; 
-    int toast_table_num ; 
+    uint32_t page_num;
+    int page_type;
+    int num;
+    int toast_table_num;
     uint8_t dead_slots[128];
-    int current_offset ; 
-    int free_size ; 
-    int normal_free_size ; 
-    int buffer_space ; 
-}page_header_struct ; 
- 
-typedef struct slots{
-    int offset ; 
-    int size ; 
-    float pk ; 
-}slots ;
+    int current_offset;
+    int free_size;
+    int normal_free_size;
+    int buffer_space;
+} page_header_struct;
+
+typedef struct slots {
+    int offset;
+    int size;
+    float pk;
+} slots;
 
 typedef struct page {
-    page_header_struct header;        
-    slots slot[max_no_of_slots]; 
-    char data[data_size]; 
+    page_header_struct header;
+    slots slot[max_no_of_slots];
+    char data[data_size];
 } page;
 
-typedef struct map_out_toast{
-    int chunk_id ; 
-    int *offset_of_the_same ; 
-    int offset_number ; 
-}map_out_toast ;
+_Static_assert(sizeof(page) == page_size, "page must be exactly page_size bytes");
+_Static_assert(use_page_size <= data_size, "use_page_size larger than page.data");
 
-typedef struct toast_table_file_header{
-    int pages_used ; 
-    int total_num_of_chunks ; 
-    uint8_t dead_space_available[128] ; 
-    int dead_space ; 
-    map_out_toast *map ;
-    int num_of_lines_in_map ;  
-}toast_table_file_header ;
+typedef struct map_out_toast {
+    int chunk_id;
+    int *offset_of_the_same;
+    int offset_number;
+} map_out_toast;
 
-typedef struct toast{
-    int chunk_id ; 
-    int page ; 
-    int slot_number ; 
-}toast ;
+typedef struct toast_table_file_header {
+    int pages_used;
+    int total_num_of_chunks;
+    uint8_t dead_slots[128];
+    uint8_t dead_space_available[128];
+    int dead_space;
+    map_out_toast *map_out_toast;
+    int num_of_lines_in_map;
+} toast_table_file_header;
 
-typedef struct toast_pointer{
-    int chunk_id ; 
-    int size ; 
-}toast_pointer ; 
+typedef struct toast {
+    int chunk_id;
+    int page;
+    int slot_number;
+} toast;
 
+typedef struct toast_pointer {
+    int chunk_id;
+    int size;
+} toast_pointer;
 
-void default_column_info(column_info * col) ; 
-void default_table_info(table_info * ti);
-void default_pagezero(pagezero * pg);
-int hash_num( char *str) ; 
-void prepared_the_intel_hash(info * intel);
-void take_care_of_stuff(ctree * tree , info * intel) ; 
-void do_the_foreign_key(ctree * tree  , table_info * ti ) ; 
-void main_create_parser(pagezero * pg) ; 
-int db_open(const char *filename)  ; 
-void write(int fd, int page_num, uint8_t *buf)  ; 
-void read(int fd, int page_num, uint8_t *buf)  ;
-void write_pagezero(pagezero * pg, const char * filename) ; 
-void read_pagezero(pagezero * pg, const char * filename) ; 
-void close(int fd)  ; 
+void default_column_info(column_info *col);
+void default_table_info(table_info *ti);
+void default_pagezero(pagezero *pg);
 
+int hash_num(char *str);
 
+void prepared_the_intel_hash(info *intel);
+void take_care_of_stuff(ctree *tree, info *intel);
+void do_the_foreign_key(ctree *tree, table_info *ti);
+void main_create_parser(pagezero *pg);
 
+int db_open(const char *filename);
+void db_write(int fd, int page_num, uint8_t *buf);
+void db_read(int fd, int page_num, uint8_t *buf);
+void write_pagezero(pagezero *pg, const char *filename);
+void read_pagezero(pagezero *pg, const char *filename);
+void db_close(int fd);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+#endif
