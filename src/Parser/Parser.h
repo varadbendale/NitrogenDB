@@ -3,7 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdbool.h>
- 
+struct Tree_def ;   
 typedef struct Create_tree_def {
     char * comp ; 
     int type ; 
