@@ -12,7 +12,7 @@ insert_parser_tree *createNodeInsert(char *comp) {
     node->table = NULL;
     node->table_cols = calloc(128, sizeof(char *));
     if (node->table_cols == NULL) {
-        ree(node->comp) ; 
+        free(node->comp) ; 
         free(node) ; 
         return NULL;
     }
@@ -30,10 +30,11 @@ insert_parser_tree *createNodeInsert(char *comp) {
         free(node);
         return NULL;
     }
-    node->num = 0;
-    node->table_col_num = 0;
-    node->insert_val_num = 0;
-    node->ignore = 0;
+    node->num = 0 ;
+    node->table_col_num = 0 ;
+    node->insert_val_num = 0 ; 
+    node->ignore = 0 ;
+    node->replace = 0 ; 
     return node;
 }
 
@@ -59,7 +60,7 @@ insert_parser_tree* expression_insert(char ***buf, insert_parser_tree *node,  in
 
     while (buf[i][j] != NULL && strcmp(buf[i][j], ";") != 0 && (i < end_row || (i == end_row && j < end_col)) ) {
         if (priority(buf[i][j]) != 0) {
-            if (j + 1 <= end_col) {
+            if (j + 1 <= end_col && buf[i][j + 1] != NULL) {
                 char merged[32];
                 snprintf(merged , sizeof(merged) , "%s%s" , buf[i][j] , buf[i][j + 1]) ;  
                 if (priority(merged) != 0) {
@@ -176,7 +177,7 @@ insert_parser_tree* expression_insert(char ***buf, insert_parser_tree *node,  in
         
         j++;
         if (buf[i][j] == NULL) {
-            if (i + 1 < end_row) { 
+            if (i + 1 <= end_row) { 
                 i++ ; 
                 j = 0 ; 
             }
@@ -240,6 +241,7 @@ itree * insert_parser(){
     }
     end_row  = i - 1  ; 
     end_col = max ; 
+    (void)end_col ;  
     i = row ; 
     j = col ; 
     itree * start = NULL ; 
@@ -327,7 +329,7 @@ itree * insert_parser(){
     else { 
         j++ ; 
     }  
-    if (buf[i][j] != NULL ){
+    if (buf[i][j] != NULL && strcmp(buf[i][j], ";") != 0  ){
         node->table = strdup(buf[i][j] ) ; 
     }
     else { 
@@ -354,7 +356,10 @@ itree * insert_parser(){
         else { 
             j++ ; 
         }
-        while (buf[i][j] != NULL && strcmp(buf[i][j] , ")" ) == 0 && node->table_col_num < 128 ){
+        while (buf[i][j] != NULL && strcmp(buf[i][j] , ")") != 0 && strcmp(buf[i][j] , "VALUES") != 0 && strcmp(buf[i][j] , ";") != 0 && node->table_col_num < 128 ){
+            if (buf[i][j+1] == NULL && i + 1 > end_row){
+                return NULL ;  
+            }   
             if (strcmp(buf[i][j], ",") == 0) {
                 if ( buf[i][j+1] == NULL ){
                     if (i+1 <= end_row){ 
@@ -396,9 +401,10 @@ itree * insert_parser(){
 
     if ( strcmp(buf[i][j] , "SELECT" ) == 0 ){
         // select work needs to be done  ; 
+        return start ; 
     }
 
-    if (strcmp(buf[i][j] , "VALUES" ) == 0  ){
+    else if (strcmp(buf[i][j] , "VALUES" ) == 0  ){
         if ( buf[i][j+1] == NULL ){
             if (i+1 <= end_row){
                 i = i+ 1 ; 
@@ -433,6 +439,9 @@ itree * insert_parser(){
             }
 
             while (buf[i][j] != NULL && strcmp(buf[i][j], ")") != 0 &&  kim < terms ){
+                if (buf[i][j+1] == NULL && i + 1 > end_row){
+                    return NULL ;  
+                }  
                 if (1){
                     if (strcmp(buf[i][j] , "(" ) == 0  ){
                         if (strcmp(buf[i][j] , "SELECT" ) == 0  ){
@@ -443,10 +452,10 @@ itree * insert_parser(){
                             return NULL ; 
                         }
                     }
-                    else { 
+                    else if (strcmp(buf[i][j], ",") != 0) {   
                         temp_value->insert_values[kim] = strdup(buf[i][j]) ;
                         temp_value->insert_val_num++;
-                        kim++ ; 
+                        kim++ ;
                     }
                 }
                 if ( buf[i][j+1] == NULL ){
@@ -493,6 +502,12 @@ itree * insert_parser(){
                 }  
             }
         }
+        if (buf[i][j] != NULL && strcmp(buf[i][j], "(") == 0){
+            return NULL ;
+        } 
+    }   
+     else {                               
+        return NULL ;
     }
     if (strcmp(buf[i][j] , "ON") == 0 ){
         if ( buf[i][j+1] == NULL ){
@@ -540,7 +555,10 @@ itree * insert_parser(){
                         int e = i ; 
                         int f = j ; 
                         int depth = 0 ;   
-                        while ( strcmp(buf[i][j] , ",") != 0  && strcmp(buf[i][j] , "RETURNING") != 0 ){
+                        while ( !(depth == 0 && (strcmp(buf[i][j] , ",") == 0 || strcmp(buf[i][j] , ";") == 0 || strcmp(buf[i][j] , "RETURNING") == 0)) ){
+                            if (buf[i][j+1] == NULL && i + 1 > end_row){
+                                return NULL ;  
+                            }  
                             if (strcmp(buf[i][j], "(") == 0) {
                                 depth++ ;
                             }
@@ -563,6 +581,9 @@ itree * insert_parser(){
                             temporary->children[temporary->num++] = expr;
                         } 
                         if (buf[i][j] != NULL && strcmp(buf[i][j], ",") == 0){
+                            if (buf[i][j+1] == NULL && i + 1 > end_row){
+                                return NULL ;  
+                            }   
                             if ( buf[i][j+1] == NULL ){
                                 if (i+1 <= end_row){
                                     i = i+1 ;
@@ -603,6 +624,9 @@ itree * insert_parser(){
             j++ ; 
         }  
         while (strcmp(buf[i][j] , ";") != 0 && node->num < 300 ){
+            if (buf[i][j+1] == NULL && i + 1 > end_row){
+                return NULL ;  
+            }   
             if (strcmp(buf[i][j], ",") == 0) {
                 if ( buf[i][j+1] == NULL ){
                     if (i+1 <= end_row){ 
