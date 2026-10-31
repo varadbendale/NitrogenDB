@@ -1,3 +1,82 @@
+unsigned long hs_hash(char *string) {
+    unsigned long number = 5381;
+    while (*string) {
+        number = number * 33 + (unsigned char)*string ;
+        string++;
+    }
+    return number % HS_BUCKETS;
+}
+
+
+hs_col *hs_find(char *table, int col, int create) {
+    hs_col *current = hs_head;
+    while (current != NULL) {
+        if (current->col == col && strcmp(current->table, table) == 0) {
+            return current;
+        }
+        current = current->next;
+    }
+    if (!create) {
+        return NULL;
+    }
+    hs_col *new_col = calloc(1, sizeof(hs_col));
+    new_col->table = strdup(table);
+    new_col->col = col;
+    new_col->next = hs_head;
+    hs_head = new_col;
+    return new_col;
+}
+
+
+int check_hash(char *val, int col, char *table) {
+    hs_col *current = hs_find(table, col, 0);
+    if (current == NULL) {
+        return 0;
+    }
+    unsigned long index = hs_hash(val);
+    hs_node *node = current->bucket[index];
+    while (node != NULL) {
+        if (strcmp(node->val, val) == 0) {
+            return 1;
+        }
+        node = node->next;
+    }
+    return 0;
+}
+
+
+void add_hash(char *table, int col, char *val) {
+    if (check_hash(val , col , table)) {
+        return;
+    }
+    hs_col *current = hs_find(table, col, 1);
+    unsigned long index = hs_hash(val);
+    hs_node *new_node = malloc(sizeof(hs_node));
+    new_node->val = strdup(val);
+    new_node->next = current->bucket[index];
+    current->bucket[index] = new_node;
+}
+
+
+void remove_hash(char *table, int col, char *val) {
+    hs_col *current = hs_find(table, col, 0);
+    if (current == NULL) {
+        return;
+    }
+    unsigned long index = hs_hash(val);
+    hs_node **node = &current->bucket[index];
+    while (*node != NULL) {
+        if (strcmp((*node)->val, val) == 0) {
+            hs_node *temp = *node;
+            *node = temp->next;
+            free(temp->val);
+            free(temp);
+            return;
+        }
+        node = &(*node)->next;
+    }
+}
+
 char *truncate_left(char *str, size_t max_bytes){
     size_t len = strlen(str);
     if (len <= max_bytes)
@@ -16,8 +95,8 @@ char *to_decimal(const char *str, int precision, int scale){
     char integer_part[256] = {0};
     char frac_part[256] = {0};
     int dot = 0;
-    int ii  = 0;
-    int fi  = 0;
+    int ii = 0;
+    int fi = 0;
     for (int i = 0 ; str[i] != '\0'; i++){
         if (str[i] == '.') { 
             dot = 1; 
@@ -89,7 +168,7 @@ void struct_for_insert(itree * tree ){
         }
     }
     info_detail * temp_info; 
-    pagezero * header = // fucntion to read the page header 
+    pagezero * header = get_pagezero(DB_FILE) ; 
     table_info * temp_table = NULL ; 
     if (tree->table != NULL ){
         if (ins->table_num > 0 ){
@@ -161,6 +240,8 @@ void struct_for_insert(itree * tree ){
     int counter = 0 ; 
     while ( d < tree->num ){
         char ** col_temp = calloc(128, sizeof(char *)); 
+        char * pend[MAX_COLUMNS] = {0}; 
+        int skip = 0 ;    
         if (strcmp(tree->children[d]->comp ,"VALUE_ROW" ) == 0 ){
             itree * temp_tree = tree->children[d] ; 
             int e = 0 ; 
@@ -170,7 +251,8 @@ void struct_for_insert(itree * tree ){
                 int temp_num = hash_num(temp_table.columns[f].col_name) ; 
                 if (hash_2[temp_num] == temp_num){
                     if (temp_table.columns[f].primary_key == true  ){
-                        if (check_hash(temp_tree->children[e]->comp , f ) == 0 ){
+                        if (check_hash(temp_tree->children[e]->comp , f , tree->table ) == 0){
+                            pend[f] = temp_tree->children[e]->comp ;        
                             if (temp_table.columns[f].col_type == VARCHAR || temp_table.columns[f].col_type == CHAR  ){
                                 col_temp[hash_1[hash_2[hash_num(temp_tree->children[e]->comp)]]] = strdup(truncate_left(temp_tree->children[e]->comp ,  temp_table.columns[f].type_bits_count ) ) ; 
                                 e++ ; 
@@ -183,6 +265,16 @@ void struct_for_insert(itree * tree ){
                                 col_temp[hash_1[hash_2[hash_num(temp_tree->children[e]->comp)]]] = strdup(temp_tree->children[e]->comp) ; 
                                 e++ ; 
                             }
+                        }
+                        else {                                      
+                            if ( error == 1  ){ 
+                                skip = 1 ;
+                                break ;
+                            }     
+                            else if (error == 2 ){ /* REPLACE: later */ }
+                            else { 
+                                return NULL ; 
+                            } 
                         }
                     }
                     else if (temp_table.columns[f].unique == true ){
@@ -202,7 +294,8 @@ void struct_for_insert(itree * tree ){
                         }
                         else { 
                             if ( error == 1  ){
-                                return NULL ; 
+                                skip = 1 ;
+                                break ;    
                             }
                             else if (error == 2 ){
                                 // do stuff ; 
@@ -239,7 +332,26 @@ void struct_for_insert(itree * tree ){
                 }
                 f++ ; 
             }
-            // get the stuff put it in the page  ; 
+            if (skip == 0){
+                char row_buf[PAGE_SIZE] = {0} ;
+                for (int k = 0; k < temp_table->num_columns; k++){ 
+                    if (k > 0) {
+                        strcat(row_buf, "\t") ;  
+                    }    
+                    if (col_temp[k] != NULL){
+                        strcat(row_buf, col_temp[k]) ;
+                    } 
+                }
+                if (FSM_insert(row_buf, page_num, offset, temp_table) != 0){   
+                    return NULL ;
+                }
+                for (int k = 0; k < temp_table->num_columns; k++)   {
+                    if (pend[k] != NULL) {
+                        add_hash(tree->table, k, pend[k]);
+                    }
+                }
+                
+            }
         }
         d++ ; 
 
