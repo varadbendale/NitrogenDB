@@ -234,7 +234,7 @@ void write_pagezero(pagezero *pg, const char *filename);
 void read_pagezero(pagezero *pg, const char *filename);
 void db_close(int fd);
 pagezero *get_pagezero(char *filename);
-page *get_page_from_file(int offset);
+page *get_page_from_file(const char *filename, long offset);
 int FSM_insert(char *insert_data, int page_num, int offset, table_info *table);
 char *truncate_left(char *str, size_t max_bytes);
 char *to_decimal(const char *str, int precision, int scale);
