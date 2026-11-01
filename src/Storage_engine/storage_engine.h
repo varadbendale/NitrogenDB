@@ -1,5 +1,6 @@
 #ifndef TYPES_H
 #define TYPES_H
+#define DB_FILE "nitrogen.db"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -12,9 +13,13 @@
 #include <limits.h>
 #include <time.h>
 
-#define page_size 4096
-#define PAGE_SIZE page_size
+#include "Parser.h"   
+
+#define PAGE_SIZE 4096
 #define INVALID_PAGE_ID 0xFFFFFFFFu
+
+#define MAX_COLUMNS 16
+#define MAX_TABLES 300
 
 enum page_types {
     toast_page = 120,
@@ -23,12 +28,12 @@ enum page_types {
 };
 
 enum frame_request {
-    force = 1
+    frame_force = 1
 };
 
 #define use_page_size 2736
 #define max_no_of_slots 100
-#define data_size (page_size - sizeof(page_header_struct) - (sizeof(slots) * max_no_of_slots))
+#define data_size (PAGE_SIZE - sizeof(page_header_struct) - (sizeof(slots) * max_no_of_slots))
 
 typedef struct {
     char col_name[64];
@@ -50,7 +55,7 @@ typedef struct {
     char table_name[64];
     uint32_t num_columns;
     uint64_t root_page;
-    column_info columns[16];
+    column_info columns[MAX_COLUMNS];
 } table_info;
 
 typedef struct {
@@ -58,7 +63,7 @@ typedef struct {
     uint16_t version;
     uint16_t page_size;
     uint32_t num_tables;
-    table_info tables[300];
+    table_info tables[MAX_TABLES];
 } pagezero;
 
 typedef struct {
@@ -109,7 +114,7 @@ typedef struct page {
     char data[data_size];
 } page;
 
-_Static_assert(sizeof(page) == page_size, "page must be exactly page_size bytes");
+_Static_assert(sizeof(page) == PAGE_SIZE, "page must be exactly PAGE_SIZE bytes");
 _Static_assert(use_page_size <= data_size, "use_page_size larger than page.data");
 
 typedef struct map_out_toast {
@@ -139,6 +144,78 @@ typedef struct toast_pointer {
     int size;
 } toast_pointer;
 
+
+#define HS_BUCKETS 1021
+
+typedef struct hs_node {
+    char *val;
+    struct hs_node *next;
+} hs_node;
+
+typedef struct hs_col {
+    char *table;
+    int col;
+    hs_node *bucket[HS_BUCKETS];
+    struct hs_col *next;
+} hs_col;
+
+
+#define frames_in_buf 1024
+#define max_pages 65536
+
+typedef struct details {
+    int valid;
+    int dirty;
+    uint32_t page_id;
+    int use_count;
+    int clock_treated_bit;
+    int io_lock;
+    int io_in_progress;
+    pthread_mutex_t latch;
+} details;
+
+typedef struct map_out_frames {
+    int frame_page_hash[max_pages];
+    uint8_t bitmaps[frames_in_buf / 8];
+    int free_bits;
+} map_out_frames;
+
+typedef struct stats {
+    int hits;
+    int misses;
+    int evictions;
+    int flushes;
+} stats;
+
+typedef struct frames {
+    char frames[frames_in_buf][4096];
+    details *dt[frames_in_buf];
+    map_out_frames *mp;
+    stats *stat;
+} frames;
+
+
+#define no_of_data 340
+
+typedef struct leaf_node_data{
+    int page_id ;
+    int file_offset ;
+    int slot_num  ;
+}leaf_node_data ;
+
+typedef struct internal_node{
+    leaf_node_data data[no_of_data] ;
+    int num_of_data_pushed ;
+    int num_of_leaf ;
+    int primary_key[no_of_data] ;
+    int root_compare ;
+    struct internal_node *children[no_of_data + 1 ] ;
+    int num_of_children ;
+    struct internal_node *next ;
+    bool leaf ;
+}internal_node ;
+
+
 void default_column_info(column_info *col);
 void default_table_info(table_info *ti);
 void default_pagezero(pagezero *pg);
@@ -146,7 +223,7 @@ void default_pagezero(pagezero *pg);
 int hash_num(char *str);
 
 void prepared_the_intel_hash(info *intel);
-void take_care_of_stuff(ctree *tree, info *intel);
+int take_care_of_stuff(ctree *tree, info *intel);
 void do_the_foreign_key(ctree *tree, table_info *ti);
 void main_create_parser(pagezero *pg);
 
@@ -156,5 +233,28 @@ void db_read(int fd, int page_num, uint8_t *buf);
 void write_pagezero(pagezero *pg, const char *filename);
 void read_pagezero(pagezero *pg, const char *filename);
 void db_close(int fd);
+pagezero *get_pagezero(char *filename);
+page *get_page_from_file(int offset);
+int FSM_insert(char *insert_data, int page_num, int offset, table_info *table);
+char *truncate_left(char *str, size_t max_bytes);
+char *to_decimal(const char *str, int precision, int scale);
+int check_hash(char *val, int col, char *table);
+void add_hash(char *table, int col, char *val);
+void struct_for_insert(itree *tree);
+extern hs_col *hs_head;
 
-#endif
+void start_the_wal(void);
+int begin_transaction(void);
+void end_transaction(int id);
+int insert_wal(int transaction_id, int page_id, int offset, char *data);
+
+extern frames *bp;
+void buffer_pool_init(void);
+void buffer_pool_flush(void);
+int insert_page_in_frame(frames *fra, int page_num);
+void not_in_use_get_out(int changed, int frame_id, frames *fra);
+
+internal_node *get_root(char *table);
+void tree_func_for_insert(internal_node *node, int pk, char *data, int page_id, int offset, int slot_num);
+
+#endif /* TYPES_H */

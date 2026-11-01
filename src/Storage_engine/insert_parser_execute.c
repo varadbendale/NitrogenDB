@@ -1,3 +1,7 @@
+#include "Parser/Parser.h"
+#include "Storage_engine/storage_engine.h"
+hs_col *hs_head = NULL;
+
 unsigned long hs_hash(char *string) {
     unsigned long number = 5381;
     while (*string) {
@@ -97,7 +101,7 @@ char *to_decimal(const char *str, int precision, int scale){
     int dot = 0;
     int ii = 0;
     int fi = 0;
-    for (int i = 0 ; str[i] != '\0'; i++){
+    for ( ; str[i] != '\0'; i++){
         if (str[i] == '.') { 
             dot = 1; 
             continue;
@@ -144,217 +148,212 @@ char *to_decimal(const char *str, int precision, int scale){
 }
 
 
-void struct_for_insert(itree * tree ){
-    int error ; 
-    insert_page * ins ; 
-    if (strcmp(tree->comp , "INSERT INTO" )== 0 ){
-        if (tree->ignore == 1 ){
-            error = 1 ; 
+void struct_for_insert(itree *tree){
+    int error = 0;
+    if (strcmp(tree->comp, "INSERT INTO") == 0){
+        if (tree->ignore == 1) {
+            error = 1;
+        } else {
+            error = 0;
         }
-        else { 
-            error = 0 ; 
-        }
+    } else if (strcmp(tree->comp, "REPLACE INTO") == 0){
+        error = 2;
     }
-    else if (strcmp(tree->comp , "REPLACE INTO" ) == 0 ){
-        error = 2 ; 
+    int u = 0;
+    while (u < tree->num){
+        if (strcmp(tree->children[u]->comp, "ON DUPLICATE KEY UPDATE") == 0){
+            error = 3;
+        }
+        u++;
     }
-    itree * tempty = tree ; 
-    int u = 0 ; 
-    insert_parser_tree *expression  ; 
-    while ( u < tree->num  ){
-        if (strcmp(tree->children[u]->comp ,"ON DUPLICATE KEY UPDATE" ) == 0 ){
-            error = 3 ; 
-            expression = tree->children[u]->children[tree->children[u]->num - 1 ] ; 
-        }
+    if (error == 2 || error == 3){
+        return;
     }
-    info_detail * temp_info; 
-    pagezero * header = get_pagezero(DB_FILE) ; 
-    table_info * temp_table = NULL ; 
-    if (tree->table != NULL ){
-        if (ins->table_num > 0 ){
-            int temp = 0 ; 
-            while (temp < tree->table_num){
-                if (strcmp(tree->table , ins->info[temp]->table ) == 0 ){
-                    temp_info = ins->info[temp] ; 
-                }
-                else { 
-                    ins->table_num++ ; 
-                    ins->info[ins->table_num]->table = strdup(tree->table) ; 
-                    ins->info[ins->table_num]->row_num = 0 ; 
-                }
-                temp++ ; 
-            }
-            temp = 0 ; 
-            while (temp < header.num_tables){
-                if (strcmp(header.tables[temp].table_name , tree->table  ) == 0 ){
-                    temp_table = header.tables[temp] ; 
-                    break ; 
-                }
-                temp++ ; 
-            }
-        }
+    pagezero *header = get_pagezero(DB_FILE);
+    if (header == NULL){
+        return;
     }
-    char ** temp_column = calloc(128, sizeof(char *));
-    int heck = 0 ; 
-    int hash_1[307] = {0};
-    int hash_2[307] = {0};
-    int position_org[307] ; 
-    int position_written[307] ; 
-    if (temp_table->table_col_num > 0 ){
-        int temp_1 = 0 ; 
-        int temp_2 = 0 ; 
-        while ( temp_1 < temp_table.num_columns ){
-            int num = hash_num(temp_table.columns[temp_1].col_name) ; 
-            hash_1[num] = num ; 
-            position_org[num] = temp_1 ; 
-            temp_1++ ;    
+    table_info *temp_table = NULL;
+    int temp = 0;
+    while (temp < (int)header->num_tables) {
+        if (strcmp(header->tables[temp].table_name, tree->table) == 0){
+            temp_table = &header->tables[temp];
+            break;
         }
-        while ( temp_2 < temp_table->table_col_num ){
-            int num = hash_num( temp_table->table_cols[temp_2]) ; 
-            hash_2[num] = num ; 
-            position_written[temp_2] = num ; 
-            temp_2++ ;    
+        temp++;
+    }
+    if (temp_table == NULL){
+        free(header);
+        return;
+    }
+    char **temp_column = calloc(128, sizeof(char *));
+    int heck = 0;
+    int hash_1[307] = {0} ;
+    int hash_2[307] = {0} ;
+    int position_org[307] ;
+    int position_written[307];
+    if (tree->table_col_num > 0){
+        int temp_1 = 0;
+        int temp_2 = 0;
+        while (temp_1 < (int)temp_table->num_columns){
+            int num = hash_num(temp_table->columns[temp_1].col_name);
+            hash_1[num] = num;
+            position_org[num] = temp_1;
+            temp_1++;
         }
-        temp_1 = 0 ; 
-        while (temp_1 < temp_table.num_columns  ){
-            int num = hash_num(temp_table.columns[temp_1].col_name) ; 
-            if (hash_2[num] != num ){
-                if (temp_table.columns[temp_1].default_stuff == true ){
+        while (temp_2 < tree->table_col_num){
+            int num = hash_num(tree->table_cols[temp_2]);
+            hash_2[num] = num;
+            position_written[temp_2] = num;
+            temp_2++;
+        }
+        temp_1 = 0;
+        while (temp_1 < (int)temp_table->num_columns){
+            int num = hash_num(temp_table->columns[temp_1].col_name);
+            if (hash_2[num] != num){
+                if (temp_table->columns[temp_1].default_stuff == true) {
                     char cleaned[32];
-                    sscanf(temp_table.default_val, " %31[^\t\n ]", cleaned);
+                    sscanf(temp_table->columns[temp_1].default_val, " %31[^\t\n ]", cleaned);
                     temp_column[heck++] = strdup(cleaned);
                 }
-                else { 
-                    if (temp_table.columns[temp_1].not_null == true ){
-                        return NULL ; 
-                    }
-                    else { 
-                        heck++ ; 
-                    }
-                }
-            }
-        }
-
-    }
-    int d = 0  ; 
-    int counter = 0 ; 
-    while ( d < tree->num ){
-        char ** col_temp = calloc(128, sizeof(char *)); 
-        char * pend[MAX_COLUMNS] = {0}; 
-        int skip = 0 ;    
-        if (strcmp(tree->children[d]->comp ,"VALUE_ROW" ) == 0 ){
-            itree * temp_tree = tree->children[d] ; 
-            int e = 0 ; 
-            int f = 0 ; 
-            int col_num = 0 ; 
-            while ( f < temp_table.num_columns){
-                int temp_num = hash_num(temp_table.columns[f].col_name) ; 
-                if (hash_2[temp_num] == temp_num){
-                    if (temp_table.columns[f].primary_key == true  ){
-                        if (check_hash(temp_tree->children[e]->comp , f , tree->table ) == 0){
-                            pend[f] = temp_tree->children[e]->comp ;        
-                            if (temp_table.columns[f].col_type == VARCHAR || temp_table.columns[f].col_type == CHAR  ){
-                                col_temp[hash_1[hash_2[hash_num(temp_tree->children[e]->comp)]]] = strdup(truncate_left(temp_tree->children[e]->comp ,  temp_table.columns[f].type_bits_count ) ) ; 
-                                e++ ; 
-                            }
-                            else if (temp_table.columns[f].col_type == DECIMAL  ){
-                                col_temp[hash_1[hash_2[hash_num(temp_tree->children[e]->comp)]]] = strdup( to_decimal(temp_tree->children[e]->comp  , temp_table.columns[f].first_decimal , temp_table.columns[f].second_decimal  )) ; 
-                                e++ ; 
-                            }
-                            else { 
-                                col_temp[hash_1[hash_2[hash_num(temp_tree->children[e]->comp)]]] = strdup(temp_tree->children[e]->comp) ; 
-                                e++ ; 
-                            }
-                        }
-                        else {                                      
-                            if ( error == 1  ){ 
-                                skip = 1 ;
-                                break ;
-                            }     
-                            else if (error == 2 ){ /* REPLACE: later */ }
-                            else { 
-                                return NULL ; 
-                            } 
-                        }
-                    }
-                    else if (temp_table.columns[f].unique == true ){
-                        if (check_hash(temp_tree->children[e]->comp , f ) == 0 ){
-                            if (temp_table.columns[f].col_type == VARCHAR || temp_table.columns[f].col_type == CHAR  ){
-                                col_temp[hash_1[hash_2[hash_num(temp_tree->children[e]->comp)]]] = strdup(truncate_left(temp_tree->children[e]->comp ,  temp_table.columns[f].type_bits_count ) ) ; 
-                                e++ ; 
-                            }
-                            else if (temp_table.columns[f].col_type == DECIMAL  ){
-                                col_temp[hash_1[hash_2[hash_num(temp_tree->children[e]->comp)]]] = strdup( to_decimal(temp_tree->children[e]->comp  , temp_table.columns[f].first_decimal , temp_table.columns[f].second_decimal  )) ; 
-                                e++ ; 
-                            }
-                            else { 
-                                col_temp[hash_1[hash_2[hash_num(temp_tree->children[e]->comp)]]] = strdup(temp_tree->children[e]->comp) ; 
-                                e++ ; 
-                            }
-                        }
-                        else { 
-                            if ( error == 1  ){
-                                skip = 1 ;
-                                break ;    
-                            }
-                            else if (error == 2 ){
-                                // do stuff ; 
-                            }
-                            else { 
-                                // do stuff  ; 
-                            }
-                        }
-                    }
-                    else { 
-                            if (temp_table.columns[f].col_type == VARCHAR || temp_table.columns[f].col_type == CHAR  ){
-                                col_temp[hash_1[hash_2[hash_num(temp_tree->children[e]->comp)]]] = strdup(truncate_left(temp_tree->children[e]->comp ,  temp_table.columns[f].type_bits_count ) ) ; 
-                                e++ ; 
-                            }
-                            else if (temp_table.columns[f].col_type == DECIMAL  ){
-                                col_temp[hash_1[hash_2[hash_num(temp_tree->children[e]->comp)]]] = strdup( to_decimal(temp_tree->children[e]->comp  , temp_table.columns[f].first_decimal , temp_table.columns[f].second_decimal  )) ; 
-                                e++ ; 
-                            }
-                            else { 
-                                col_temp[hash_1[hash_2[hash_num(temp_tree->children[e]->comp)]]] = strdup(temp_tree->children[e]->comp) ; 
-                                e++ ; 
-                            }
-                    }
-                }
                 else {
-                    if (temp_table.columns[f].primary_key == false ){
-                        if (temp_column[counter] != NULL ){
-                            col_temp[f] = temp_column[counter++] ;  
+                    if (temp_table->columns[temp_1].not_null == true) {
+                        free(header);
+                        return;
+                    }
+                    else {
+                        heck++;
+                    }
+                }
+            }
+
+            temp_1++;
+        }
+    } 
+    else {
+        for (int z = 0; z < (int)temp_table->num_columns; z++) {
+            int num = hash_num(temp_table->columns[z].col_name);
+            hash_2[num] = num;
+        }
+    }
+    int d = 0;
+    while (d < tree->num){
+        int counter = 0;
+        char **col_temp = calloc(128, sizeof(char *));
+        char *pend[MAX_COLUMNS] = {0};
+        int skip = 0;
+        if (strcmp(tree->children[d]->comp, "VALUE_ROW") == 0) {
+            itree *temp_tree = tree->children[d];
+            if (tree->table_col_num == 0 && temp_tree->insert_val_num != (int)temp_table->num_columns) {
+                free(header);
+                return;
+            }
+            int e = 0;
+            int f = 0;
+            while (f < (int)temp_table->num_columns){
+                int temp_num = hash_num(temp_table->columns[f].col_name);
+                if (hash_2[temp_num] == temp_num) {
+                    if (tree->table_col_num > 0) {
+                        for (int g = 0; g < tree->table_col_num; g++) {
+                            if (strcmp(tree->table_cols[g], temp_table->columns[f].col_name) == 0) {
+                                e = g;
+                                break;
+                            }
                         }
                     }
-                    else { 
-                        return NULL ; 
+                    if (temp_table->columns[f].primary_key == true) {
+                        if (check_hash(temp_tree->insert_values[e], f, tree->table) == 0) {
+                            pend[f] = temp_tree->insert_values[e];
+                            if (temp_table->columns[f].col_type == VARCHAR ||
+                                temp_table->columns[f].col_type == CHAR) {
+                                col_temp[f] = strdup( truncate_left( temp_tree->insert_values[e] , temp_table->columns[f].type_bits_count ) );
+                                e++;
+                            }
+                            else if (temp_table->columns[f].col_type == DECIMAL) {
+                                col_temp[f] = to_decimal( temp_tree->insert_values[e] , temp_table->columns[f].first_decimal , temp_table->columns[f].second_decimal );
+                                e++;
+                            }
+                            else {
+                                col_temp[f] = strdup(temp_tree->insert_values[e]);
+                                e++;
+                            }
+                        } 
+                        else {
+                            if (error == 1) {
+                                skip = 1;
+                                break;
+                            }
+                            else {
+                                free(header);
+                                return;
+                            }
+                        }
+                    } else {
+                        if (temp_table->columns[f].col_type == VARCHAR || temp_table->columns[f].col_type == CHAR) {
+                            col_temp[f] = strdup( truncate_left( temp_tree->insert_values[e], temp_table->columns[f].type_bits_count ) );
+                            e++;
+                        } 
+                        else if (temp_table->columns[f].col_type == DECIMAL) {
+                            col_temp[f] = to_decimal( temp_tree->insert_values[e], temp_table->columns[f].first_decimal, temp_table->columns[f].second_decimal );
+                            e++;
+                        } 
+                        else {
+                            col_temp[f] = strdup(temp_tree->insert_values[e]);
+                            e++;
+                        }
+                    }
+                } 
+                else {
+                    if (temp_table->columns[f].primary_key == false) {
+                        if (temp_column[counter] != NULL) {
+                            col_temp[f] = strdup(temp_column[counter]);
+                        }
+
+                        counter++;
+                    } 
+                    else {
+                        free(header);
+                        return;
                     }
                 }
-                f++ ; 
+
+                f++;
             }
+
             if (skip == 0){
-                char row_buf[PAGE_SIZE] = {0} ;
-                for (int k = 0; k < temp_table->num_columns; k++){ 
+                char row_buf[PAGE_SIZE] = {0};
+                for (int k = 0; k < (int)temp_table->num_columns; k++) {
                     if (k > 0) {
-                        strcat(row_buf, "\t") ;  
-                    }    
-                    if (col_temp[k] != NULL){
-                        strcat(row_buf, col_temp[k]) ;
-                    } 
+                        strcat(row_buf, "\t");
+                    }
+                    if (col_temp[k] != NULL) {
+                        strcat(row_buf, col_temp[k]);
+                    }
                 }
-                if (FSM_insert(row_buf, page_num, offset, temp_table) != 0){   
-                    return NULL ;
+                int page_num = (int)temp_table->root_page;
+                int where = FSM_insert(row_buf, page_num, 0, temp_table);
+                if (where < 0 && page_num > 0){
+                    where = FSM_insert(row_buf, 0, 0, temp_table);
                 }
-                for (int k = 0; k < temp_table->num_columns; k++)   {
+                if (where < 0){
+                    free(header);
+                    return;
+                }
+                temp_table->root_page = where;
+                for (int k = 0; k < (int)temp_table->num_columns; k++){
                     if (pend[k] != NULL) {
                         add_hash(tree->table, k, pend[k]);
                     }
                 }
-                
             }
         }
-        d++ ; 
-
+        for (int k = 0; k < (int)temp_table->num_columns; k++){
+            free(col_temp[k]);
+        }
+        free(col_temp);
+        d++;
     }
 
+    write_pagezero(header, DB_FILE);
+    free(header);
 }
