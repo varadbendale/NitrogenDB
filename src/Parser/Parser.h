@@ -1,9 +1,16 @@
+#ifndef PARSER_H
+#define PARSER_H
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include <stdbool.h>
-struct Tree_def ;   
+
+typedef struct Tree_def Tree_def;
+typedef struct Tree_def tree;
+typedef struct insert_parser_tree insert_parser_tree;  
+
 typedef struct Create_tree_def {
     char * comp ; 
     int type ; 
@@ -23,11 +30,9 @@ typedef struct Create_tree_def {
     struct Create_tree_def** children;   
     int num ; 
     tree * as ; 
-}ctree
+} ctree;
 
-
-
-typedef struct  insert_parser_tree{
+typedef struct insert_parser_tree {
     char *comp;
     char *table;
     char **table_cols;
@@ -38,25 +43,24 @@ typedef struct  insert_parser_tree{
     int insert_val_num;
     int ignore;
     int replace  ;
-} itree 
-
-
+} itree;
 
 enum type_of_cols {
-    INT  = 50 ,    
-    BIGINT ,  
-    SMALLINT,   
-    TINYINT,     
-    FLOAT,      
-    DOUBLE ,     
-    CHAR ,  
-    VARCHAR, 
+    INT  = 50 ,
+    BIGINT ,
+    SMALLINT,
+    TINYINT,
+    FLOAT,
+    DOUBLE ,
+    CHAR ,
+    VARCHAR,
     BOOL ,
     DATE ,
-    TIMESTAMP 
+    TIMESTAMP ,
+    DECIMAL
 } ;
 
-typedef struct Tree_def {
+struct Tree_def {
     char* comp; 
     struct Tree_def** children;   
     char* as  ; 
@@ -64,9 +68,7 @@ typedef struct Tree_def {
     int line;                 
     int col;
     int num  ; 
-} Tree_def;
-
-typedef Tree_def tree  ; 
+};
 
 typedef struct delete_parser_tree {
     char * comp ;
@@ -81,18 +83,16 @@ typedef struct delete_parser_tree {
 dtree* createNodeDelete( char* comp ) ;
 dtree* delete_parser() ;
 
-
-
-Tree_def* make_leaf(char* value , int row , int col ) {
-    Tree_def* n = malloc(sizeof(Tree_def));
+static inline Tree_def* make_leaf(char* value , int row , int col ) {
+    Tree_def* n = calloc(1, sizeof(Tree_def));   
     if (n == NULL) {
         return NULL;   
     }
     if ( value != NULL ){
-      n->comp = strdup(value);
+        n->comp = strdup(value);
     }
     n->as = NULL;
-    n->children[300] = NULL;
+    n->children = NULL ;
     n->direction = NULL ; 
     n->line = row ; 
     n->col = col;
@@ -110,14 +110,18 @@ tree *comp_2(char*** buf , tree * node  ,  int i , int j , int end_row , int end
 tree *comp_3(char*** buf , tree * node  ,  int i , int j , int end_row , int end_col  , int pain  , int having ) ; 
 tree * select_query( int row , int col , int check , int end_row , int end_col , int pain) ; 
 
-
-
 ctree* createNode( char* comp)  ; 
 bool validate_default(char *default_val, int type)  ; 
 ctree* create_parser() ; 
 
+itree *createNodeInsert(char *comp)  ; 
+itree* expression_insert(char ***buf, itree *node,  int i, int j, int end_row, int end_col) ; 
+itree * insert_parser() ;
 
-insert_parser_tree *createNodeInsert(char *comp)  ; 
-insert_parser_tree* expression_insert(char ***buf, insert_parser_tree *node,  int i, int j, int end_row, int end_col) ; 
-itree * insert_parser() ; 
+typedef struct {
+    char ***query;
+} parser_data;
 
+extern parser_data proper_data;
+
+#endif /* PARSER_H */
