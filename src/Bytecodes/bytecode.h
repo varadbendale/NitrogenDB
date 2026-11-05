@@ -103,19 +103,24 @@ typedef struct path_entry{
     uint16_t  cell_index     ; 
 }
 
+typedef struct leaf_node_data{
+    int page_id ; 
+    int file_offset ; 
+    int slot_num  ; 
+}leaf_node_data ; 
 
-typedef struct btree{
+typedef struct bptree{
     table * Table ; 
-    uint32_t start_root_num ; 
-    uint32_t page_num ; 
-    uint32_t row_num ; 
+    int  start_root_num ; 
+    leaf_node_data data ; 
+    internal_node tree ; 
+    internal_node current_node ; 
+    int current_number ; 
     bool start ; 
     int data_type ; 
     bool end ; 
     int total ; 
     int mode ; 
-    int depth ; 
-    path_entry stack[300] ; 
     bool null ; 
 }
 
@@ -164,7 +169,7 @@ typedef struct byte{
     int reg_mode ; 
     hash_bins_str * hash_bins ; 
     aggregate agg[300] ; 
-    btree btr[300] ; 
+    bptree btr[300] ; 
     table *db ; 
     Pager *pager ; 
     sorter * sort ; 
