@@ -192,6 +192,10 @@ void tree_func_for_insert(internal_node * node  , int pk , char * data , int pag
 
                 tempo->next = nadda->next ;
                 nadda->next = tempo ;
+                tempo->prev = nadda ;
+                if (tempo->next != NULL){
+                    tempo->next->prev = tempo ;
+                }
 
                 int where = which_pos ;                              
                 if ( where <= tempacola ){
@@ -275,7 +279,7 @@ int validate_the_tree(internal_node * root ){
     if (validate_the_tree_data(root) == 1 ){
         return 1  ; 
     }
-    else if (validate_the_tree_node(root) == 1){
+    else if (validate_the_tree_node(root, INT_MAX, INT_MIN) == 1){
         return 1 ; 
     }
     return 0 ; 
@@ -454,6 +458,9 @@ internal_node * delete_the_thing(internal_node * node , int key ){
                 prev->num_of_data_pushed++ ; 
             }
             prev->next = temp->next ; 
+            if (prev->next != NULL){
+                prev->next->prev = prev ;
+            }
             termination_child(temp_stack[first_counter - 1] , first_pos[first_counter - 1]) ;
 
             release_page(temp) ; 
@@ -523,6 +530,9 @@ internal_node * delete_the_thing(internal_node * node , int key ){
                     temp->num_of_data_pushed++ ; 
                 }
                 temp->next = the_next_one->next ;
+                if (temp->next != NULL){
+                    temp->next->prev = temp ;
+                }
                 termination_child(next_temp_stack[second_counter - 1] , second_pos[second_counter - 1]) ;
                 release_page(the_next_one) ;
                 free(the_next_one) ;
@@ -655,5 +665,3 @@ internal_node * delete_the_thing(internal_node * node , int key ){
 
     return node ;
 }
-
-

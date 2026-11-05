@@ -26,6 +26,7 @@ typedef struct internal_node{
     int num_of_children ; 
     struct internal_node *next ; 
     bool leaf ; 
+    struct internal_node *prev ; 
 }internal_node ; 
 
 
