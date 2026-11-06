@@ -5,6 +5,24 @@ int count = 0 ;
 sorter[op->p1]->array[count].key = get_data_sort( sorter[op->p1]->array[count] , sorter[op->p1].cols_to_look  ) ; 
 
 
+int give_primary_number( reg * regist ){
+    if ( regist->type == integer_op  ){
+        return (float)regist->val.i ; 
+    }
+    else if (  regist->type == real_num   ){
+        return regist->val.r ; 
+    }
+    else {
+        int num = 0 ; 
+        int i = 0 ; 
+        while ( i < regist->lenght ){
+            num = num + regist->val.s[i] ; 
+            i++ ; 
+        } 
+        return float(num) ; 
+    }
+}
+
 
 unsigned char * make_record_data(byte * byt , int start , int end ){
     unsigned char *ans[300] ; 
@@ -638,286 +656,205 @@ void bytcode(byte *byt){
                 break ; 
 
 
-            case seek_ge : 
-            
-                int size = 0 ; 
-                byt->btr[op->p1].depth = 0 ; 
-                uint32_t children = byt->btr[op->p1].start_root_num   ; 
-                page_header *hdr = pager_get_page(byt->pager , children) ; 
-                byt->btr[op->p1].stack[byt->btr[op->p1].depth] = (path_entry){children  , 0 } ; 
-                while ( hdr->page_type != LEAF ){
-                    int id = hdr->num_cells ; 
-                    for ( int i = 0 ; i < hdr->num_cells ; i++  ){
-                        void *cell = get_cell(hdr, i);
-                        reg cell_key = get_key_from_cell(cell);
-                        if (campare(byt->regis[op->p3], cell_key, cur->data_type) == 0) {
-                            id = i;
-                            break ;
-                        }
-                    }
-                    children = get_child_pointer(byt->pager , children  ,id )  ; 
-                    hdr = (page_header*)pager_get_page(byte->pager,children  ) ; 
-                    size = size + hdr->num_cells ; 
-                    byt->btr[op->p1].stack[byt->btr[op->p1].depth++] = (path_entry){children , id } ; 
-                }
-
-                int tot = byt->btr[op->p1].total - 1  ; 
-                int ans_id = -1 ; 
-                int found = 0 ; 
-                while ( size < tot  ){
-                    if(bs(hdr ,byt->regis[op->p3]  , byt->btr[op->p1].data_type ,&ans_id ,  campare_ge ) == 1 ){
-                        byt->btr[op->p1].stack[byt->btr[op->p1].depth++] = (path_entry){children , ans_id } ; 
-                        byt->btr[op->p1].page_num = children ; 
-                        byt->btr[op->p1].row_num = ans_id ; 
-                        found = 1 ; 
-                        break ; 
-                    }
-
-                    int kept = 0 ; 
-                    while ( byt->btr[op->p1].depth > 0 ){
-                        path_entry * ptr = &byt->btr[op->p1].stack[byt->btr[op->p1].depth - 1 ] ; 
-                        page_header * hdr = pager_get_page(byt->pager , ptr->page_num) ; 
-                        if (ptr->cell_index + 1 < hdr->num_cells ){
-                                ptr->cell_index++ ; 
-                                children = get_child_pointer(byt->pager , ptr->page_num ,ptr->cell_index ) ; 
-                                page_header *chdr = (page_header*)pager_get_page(pager,children  ) ; 
-                                    while ( chdr->page_type != LEAF ){
-                                        byt->btr[op->p1].stack[byt->btr[op->p1].depth++] = (path_entry){children , 0 } ; 
-                                        children = get_child_pointer(byt->pager , ptr->page_num  ,0 )  ; 
-                                        chdr = (page_header*)pager_get_page(pager,children  ) ; 
-                                    }
-                                byt->btr[op->p1].stack[byt->btr[op->p1].depth++]  = (path_entry){children , 0 } ; 
-                                byt->btr[op->p1].page_num = children ; 
-                                byt->btr[op->p1].row_num++ ;  
-                                kept = 1 ; 
-                                size = size + chdr->num_cells ; 
-                                hdr = chdr ; 
-                                break ; 
-                        }
-                        byt->btr[op->p1].depth-- ; 
-                    }
-                    if (kept == 0 ){
-                        byt->pc = op->p2;
-                        break ; 
-                    }
-                }
-
-                if (!found && size >= tot) {
-                    byt->pc = op->p2;
-                }
-
-                break;
-        
-
-
             case seek_le : 
-                int size = 0 ; 
-                byt->btr[op->p1].depth = 0 ; 
-                uint32_t children = byt->btr[op->p1].start_root_num   ; 
-                page_header *hdr = pager_get_page(byt->pager , children) ; 
-                byt->btr[op->p1].stack[byt->btr[op->p1].depth] = (path_entry){children  , 0 } ; 
-                while ( hdr->page_type != LEAF ){
-                    int id = hdr->num_cells ; 
-                    for ( int i = 0 ; i < hdr->num_cells ; i++  ){
-                        void *cell = get_cell(hdr, i);
-                        reg cell_key = get_key_from_cell(cell);
-                        if (campare(byt->regis[op->p3], cell_key, cur->data_type) == 0) {
-                            id = i;
-                            break;
+                internal_node tree  = byt->btr[op->p1].tree ; 
+                int turner = 0 ; 
+                int pk = give_primary_number(byt->regis[op->p3] ) ; 
+                while ( tree->children != NULL ){
+                    int low = 0 ;
+                    int high = tree->num_of_leaf - 1 ;
+                    int ans = -1 ; 
+                    while (low <= high){
+                        int mid = (low + high) / 2 ;
+                        if (tree->primary_key[mid] <= pk ){
+                            ans = mid ; 
+                            low = mid + 1 ; 
+                        }
+                        else {
+                            high = mid - 1 ;
                         }
                     }
-                    children = get_child_pointer(byt->pager , children  ,id )  ; 
-                    hdr = (page_header*)pager_get_page(byte->pager,children  ) ; 
-                    size = size + hdr->num_cells ; 
-                    byt->btr[op->p1].stack[byt->btr[op->p1].depth++] = (path_entry){children , id } ; 
-                }
-
-                int tot = byt->btr[op->p1].total - 1  ; 
-                int ans_id = -1 ; 
-                int found = 0 ; 
-                while ( size < tot  ){
-                    if(bs(hdr ,byt->regis[op->p3]  , byt->btr[op->p1].data_type ,&ans_id ,  campare_le   ) == 1 ){
-                        byt->btr[op->p1].stack[byt->btr[op->p1].depth++] = (path_entry){children , ans_id } ; 
-                        byt->btr[op->p1].page_num = children ; 
-                        byt->btr[op->p1].row_num = ans_id ; 
-                        found = 1 ; 
+                    if (ans == -1 ){
+                        byt->pc = op->p2 ;
+                        turner = 1 ; 
                         break ; 
                     }
-
-                    int kept = 0 ; 
-                    while ( byt->btr[op->p1].depth > 0 ){
-                        path_entry * ptr = &byt->btr[op->p1].stack[byt->btr[op->p1].depth - 1 ] ; 
-                        page_header * hdr = pager_get_page(byt->pager , ptr->page_num) ; 
-                        if (ptr->cell_index + 1 < hdr->num_cells ){
-                                ptr->cell_index++ ; 
-                                children = get_child_pointer(byt->pager , ptr->page_num ,ptr->cell_index ) ; 
-                                page_header *chdr = (page_header*)pager_get_page(pager,children  ) ; 
-                                    while ( chdr->page_type != LEAF ){
-                                        byt->btr[op->p1].stack[byt->btr[op->p1].depth++] = (path_entry){children , 0 } ; 
-                                        children = get_child_pointer(byt->pager , ptr->page_num  ,0 )  ; 
-                                        chdr = (page_header*)pager_get_page(pager,children  ) ; 
-                                    }
-                                byt->btr[op->p1].stack[byt->btr[op->p1].depth++]  = (path_entry){children , 0 } ; 
-                                byt->btr[op->p1].page_num = children ; 
-                                byt->btr[op->p1].row_num++ ;  
-                                kept = 1 ; 
-                                size = size + chdr->num_cells ; 
-                                hdr = chdr ; 
-                                break ; 
-                        }
-                        byt->btr[op->p1].depth-- ; 
+                    tree = tree->children[ans] ; 
+                }
+                if ( turner == 1 ){
+                    break ; 
+                }
+                byt->btr[op->p1].current_node = tree ; 
+                int low = 0 ; 
+                int high = tree->num_of_children - 1  ; 
+                int ans = -1 ; 
+                while ( low <= high ){
+                    int mid  = ( low + high ) /2 ; 
+                    if (tree->primary_key[mid] <= pk ){
+                        ans = mid ; 
+                        low = mid + 1 ; 
                     }
-                    if (kept == 0 ){
-                        byt->pc = op->p2;
-                        break ; 
+                    else {
+                        high = mid - 1 ;
                     }
                 }
-
-                if (!found && size >= tot) {
-                    byt->pc = op->p2;
+                if ( ans == -1 ){
+                    byt->pc = op->p2 ;
+                    break ; 
                 }
+                byt->btr[op->p1].data = tree->data[ans] ; 
+                byt->btr[op->p1].current_number = ans ; 
+                break ; 
 
-                break;
-        
 
             case seek_lt : 
-                int size = 0 ; 
-                byt->btr[op->p1].depth = 0 ; 
-                uint32_t children = byt->btr[op->p1].start_root_num   ; 
-                page_header *hdr = pager_get_page(byt->pager , children) ; 
-                byt->btr[op->p1].stack[byt->btr[op->p1].depth] = (path_entry){children  , 0 } ; 
-                while ( hdr->page_type != LEAF ){
-                    int id = hdr->num_cells ; 
-                    for ( int i = 0 ; i < hdr->num_cells ; i++  ){
-                        void *cell = get_cell(hdr, i);
-                        reg cell_key = get_key_from_cell(cell);
-                        if (campare(byt->regis[op->p3], cell_key, cur->data_type) == 0) {
-                            id = i;
-                            break;
+                internal_node tree  = byt->btr[op->p1].tree ; 
+                int turner = 0 ; 
+                int pk = give_primary_number(byt->regis[op->p3] ) ; 
+                while ( tree->children != NULL ){
+                    int low = 0 ;
+                    int high = tree->num_of_leaf - 1 ;
+                    int ans = -1 ; 
+                    while (low <= high){
+                        int mid = (low + high) / 2 ;
+                        if (tree->primary_key[mid] < pk ){
+                            ans = mid ; 
+                            low = mid + 1 ; 
+                        }
+                        else {
+                            high = mid - 1 ;
                         }
                     }
-                    children = get_child_pointer(byt->pager , children  ,id )  ; 
-                    hdr = (page_header*)pager_get_page(byte->pager,children  ) ; 
-                    size = size + hdr->num_cells ; 
-                    byt->btr[op->p1].stack[byt->btr[op->p1].depth++] = (path_entry){children , id } ; 
-                }
-
-                int tot = byt->btr[op->p1].total - 1  ; 
-                int ans_id = -1 ; 
-                int found = 0 ; 
-                while ( size < tot  ){
-                    if(bs(hdr ,byt->regis[op->p3]  , byt->btr[op->p1].data_type ,&ans_id ,  campare_lt   ) == 1 ){
-                        byt->btr[op->p1].stack[byt->btr[op->p1].depth++] = (path_entry){children , ans_id } ; 
-                        byt->btr[op->p1].page_num = children ; 
-                        byt->btr[op->p1].row_num = ans_id ; 
-                        found = 1 ; 
+                    if (ans == -1 ){
+                        byt->pc = op->p2 ;
+                        turner = 1 ; 
                         break ; 
                     }
+                    tree = tree->children[ans] ; 
+                }
+                if ( turner == 1 ){
+                    break ; 
+                }
+                byt->btr[op->p1].current_node = tree ; 
+                int low = 0 ; 
+                int high = tree->num_of_children - 1  ; 
+                int ans = -1 ; 
+                while ( low <= high ){
+                    int mid  = ( low + high ) /2 ; 
+                    if (tree->primary_key[mid] < pk ){
+                        ans = mid ; 
+                        low = mid + 1 ; 
+                    }
+                    else {
+                        high = mid - 1 ;
+                    }
+                }
+                if ( ans == -1 ){
+                    byt->pc = op->p2 ;
+                    break ; 
+                }
+                byt->btr[op->p1].data = tree->data[ans] ; 
+                byt->btr[op->p1].current_number = ans ; 
+                break ; 
 
-                    int kept = 0 ; 
-                    while ( byt->btr[op->p1].depth > 0 ){
-                        path_entry * ptr = &byt->btr[op->p1].stack[byt->btr[op->p1].depth - 1 ] ; 
-                        page_header * hdr = pager_get_page(byt->pager , ptr->page_num) ; 
-                        if (ptr->cell_index + 1 < hdr->num_cells ){
-                                ptr->cell_index++ ; 
-                                children = get_child_pointer(byt->pager , ptr->page_num ,ptr->cell_index ) ; 
-                                page_header *chdr = (page_header*)pager_get_page(pager,children  ) ; 
-                                    while ( chdr->page_type != LEAF ){
-                                        byt->btr[op->p1].stack[byt->btr[op->p1].depth++] = (path_entry){children , 0 } ; 
-                                        children = get_child_pointer(byt->pager , ptr->page_num  ,0 )  ; 
-                                        chdr = (page_header*)pager_get_page(pager,children  ) ; 
-                                    }
-                                byt->btr[op->p1].stack[byt->btr[op->p1].depth++]  = (path_entry){children , 0 } ; 
-                                byt->btr[op->p1].page_num = children ; 
-                                byt->btr[op->p1].row_num++ ;  
-                                kept = 1 ; 
-                                size = size + chdr->num_cells ; 
-                                hdr = chdr ; 
-                                break ; 
+
+            case seek_ge : 
+                internal_node tree  = byt->btr[op->p1].tree ; 
+                int pk = give_primary_number(byt->regis[op->p3] ) ; 
+                while ( tree->children != NULL ){
+                    int low = 0 ;
+                    int high = tree->num_of_leaf - 1 ;
+                    int ans = -1 ; 
+                    while (low <= high){
+                        int mid = (low + high) / 2 ;
+                        if (tree->primary_key[mid] <= pk ){
+                            ans = mid ; 
+                            low = mid + 1 ; 
                         }
-                        byt->btr[op->p1].depth-- ; 
+                        else {
+                            high = mid - 1 ;
+                        }
                     }
-                    if (kept == 0 ){
-                        byt->pc = op->p2;
+                    if (ans == -1 ){
+                        ans = 0 ; 
+                    }
+                    tree = tree->children[ans] ; 
+                }
+                byt->btr[op->p1].current_node = tree ; 
+                int low = 0 ; 
+                int high = tree->num_of_children - 1  ; 
+                int ans = -1 ; 
+                while ( low <= high ){
+                    int mid  = ( low + high ) /2 ; 
+                    if (tree->primary_key[mid] >= pk ){
+                        ans = mid ; 
+                        high = mid - 1 ; 
+                    }
+                    else {
+                        low = mid + 1 ;
+                    }
+                }
+                if ( ans == -1 ){
+                    if ( tree->next == NULL ){
+                        byt->pc = op->p2 ;
                         break ; 
                     }
+                    tree = tree->next ; 
+                    byt->btr[op->p1].current_node = tree ; 
+                    ans = 0 ; 
                 }
-
-                if (!found && size >= tot) {
-                    byt->pc = op->p2;
-                }
-
-                break;
-        
+                byt->btr[op->p1].data = tree->data[ans] ; 
+                byt->btr[op->p1].current_number = ans ; 
+                break ; 
 
             case seek_gt : 
-                int size = 0 ; 
-                byt->btr[op->p1].depth = 0 ; 
-                uint32_t children = byt->btr[op->p1].start_root_num   ; 
-                page_header *hdr = pager_get_page(byt->pager , children) ; 
-                byt->btr[op->p1].stack[byt->btr[op->p1].depth] = (path_entry){children  , 0 } ; 
-                while ( hdr->page_type != LEAF ){
-                    int id = hdr->num_cells ; 
-                    for ( int i = 0 ; i < hdr->num_cells ; i++  ){
-                        void *cell = get_cell(hdr, i);
-                        reg cell_key = get_key_from_cell(cell);
-                        if (campare(byt->regis[op->p3], cell_key, cur->data_type) == 0) {
-                            id = i;
-                            break;
+                internal_node tree  = byt->btr[op->p1].tree ; 
+                int pk = give_primary_number(byt->regis[op->p3] ) ; 
+                while ( tree->children != NULL ){
+                    int low = 0 ;
+                    int high = tree->num_of_leaf - 1 ;
+                    int ans = -1 ; 
+                    while (low <= high){
+                        int mid = (low + high) / 2 ;
+                        if (tree->primary_key[mid] <= pk ){
+                            ans = mid ; 
+                            low = mid + 1 ; 
+                        }
+                        else {
+                            high = mid - 1 ;
                         }
                     }
-                    children = get_child_pointer(byt->pager , children  ,id )  ; 
-                    hdr = (page_header*)pager_get_page(byte->pager,children  ) ; 
-                    size = size + hdr->num_cells ; 
-                    byt->btr[op->p1].stack[byt->btr[op->p1].depth++] = (path_entry){children , id } ; 
+                    if (ans == -1 ){
+                        ans = 0 ; 
+                    }
+                    tree = tree->children[ans] ; 
                 }
-
-                int tot = byt->btr[op->p1].total - 1  ; 
-                int ans_id = -1 ; 
-                int found = 0 ; 
-                while ( size < tot  ){
-                    if(bs(hdr ,byt->regis[op->p3]  , byt->btr[op->p1].data_type ,&ans_id ,  campare_gt   ) == 1 ){
-                        byt->btr[op->p1].stack[byt->btr[op->p1].depth++] = (path_entry){children , ans_id } ; 
-                        byt->btr[op->p1].page_num = children ; 
-                        byt->btr[op->p1].row_num = ans_id ; 
-                        found = 1 ; 
+                byt->btr[op->p1].current_node = tree ; 
+                int low = 0 ; 
+                int high = tree->num_of_children - 1  ; 
+                int ans = -1 ; 
+                while ( low <= high ){
+                    int mid  = ( low + high ) /2 ; 
+                    if (tree->primary_key[mid] > pk ){
+                        ans = mid ; 
+                        high = mid - 1 ; 
+                    }
+                    else {
+                        low = mid + 1 ;
+                    }
+                }
+                if ( ans == -1 ){
+                    if ( tree->next == NULL ){
+                        byt->pc = op->p2 ;
                         break ; 
                     }
-
-                    int kept = 0 ; 
-                    while ( byt->btr[op->p1].depth > 0 ){
-                        path_entry * ptr = &byt->btr[op->p1].stack[byt->btr[op->p1].depth - 1 ] ; 
-                        page_header * hdr = pager_get_page(byt->pager , ptr->page_num) ; 
-                        if (ptr->cell_index + 1 < hdr->num_cells ){
-                                ptr->cell_index++ ; 
-                                children = get_child_pointer(byt->pager , ptr->page_num ,ptr->cell_index ) ; 
-                                page_header *chdr = (page_header*)pager_get_page(pager,children  ) ; 
-                                    while ( chdr->page_type != LEAF ){
-                                        byt->btr[op->p1].stack[byt->btr[op->p1].depth++] = (path_entry){children , 0 } ; 
-                                        children = get_child_pointer(byt->pager , ptr->page_num  ,0 )  ; 
-                                        chdr = (page_header*)pager_get_page(pager,children  ) ; 
-                                    }
-                                byt->btr[op->p1].stack[byt->btr[op->p1].depth++]  = (path_entry){children , 0 } ; 
-                                byt->btr[op->p1].page_num = children ; 
-                                byt->btr[op->p1].row_num++ ;  
-                                kept = 1 ; 
-                                size = size + chdr->num_cells ; 
-                                hdr = chdr ; 
-                                break ; 
-                        }
-                        byt->btr[op->p1].depth-- ; 
-                    }
-                    if (kept == 0 ){
-                        byt->pc = op->p2;
-                        break ; 
-                    }
+                    tree = tree->next ; 
+                    byt->btr[op->p1].current_node = tree ; 
+                    ans = 0 ; 
                 }
-
-                if (!found && size >= tot) {
-                    byt->pc = op->p2;
-                }
-
-                break;
+                byt->btr[op->p1].data = tree->data[ans] ; 
+                byt->btr[op->p1].current_number = ans ; 
+                break ; 
 
             case if_op : 
                 reg * temp = &byt->regis[op->p1];
