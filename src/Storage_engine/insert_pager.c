@@ -1,28 +1,8 @@
-#define integer_num "I"
-#define real_num "R"
-#define toast_num "T"
-#define string_num "S"
-#define date_num "D"
-#define timestamp_num "M"
+#include "Storage_engine/storage_engine.h"
 
-#define data_filename "normal_file"
-#define toast_header_filename "toast_header"
-#define toast_map_filename "toast_map"
-#define toast_filename "toast_data"
+int number_of_pages = 0;
 
-extern frames *bp;
-internal_node *get_root(char *table);
-int begin_transaction(void);
-void end_transaction(int id);
-int insert_wal(int transaction_id, int page_id, int offset, char *data);
-void tree_func_for_insert(internal_node *node, int pk, char *data, int page_id, int offset, int slot_num);
-int insert_page_in_frame(frames *fra, int page_num);
-void not_in_use_get_out(int changed, int frame_id, frames *fra);
-
-int number_of_pages = 0 ;
-char *toast_tables_insert(char *data);
-
-page *get_page_from_file(int offset) {
+page *get_page_from_file( int offset ) {
     FILE *file = fopen(data_filename, "rb");
     if (file == NULL) {
         return NULL ;
@@ -33,9 +13,9 @@ page *get_page_from_file(int offset) {
         fclose(file);
         return NULL;
     }
-    size_t bytes_read = fread(ans, 1, sizeof(page), file);
+    size_t bytes_read = fread( ans , 1, sizeof(page), file);
     fclose(file);
-    if (bytes_read != sizeof(page)) {
+    if ( bytes_read != sizeof(page)) {
         free(ans) ;
         return NULL ; }
     return ans;
@@ -63,30 +43,30 @@ int write_page_to_file(page *p, int offset ){
 }
 
 
-int flatten_ans(char **ans , int cnt , char *out , int cap) {
+int flatten_ans(char ** words , int num_of , char * ans , int num) {
     int lenght = 0 ;
-    int bad = 0 ;
-    for (int i = 0 ; i < cnt ; i++) {
-        int len = (int)strlen(ans[i]) ;
-        if (lenght + len > cap - 1) {
-            bad = 1 ;
+    int out_of_bound = 0 ;
+    for (int i = 0 ; i < num_of ; i++) {
+        int len = strlen(words[i]) ;
+        if (lenght + len > num - 1) {
+            out_of_bound = 1 ;
         }
         else {
-            memcpy(out + lenght , ans[i] , len );
+            memcpy(ans + lenght , words[i] , len );
             lenght += len ;
         }
-        free(ans[i]) ;
+        free(words[i]) ;
     }
-    if (bad == 1 ){
+    if (out_of_bound == 1 ){
         return -1 ;
     }
-    out[lenght] = '\0' ;
+    ans[lenght] = '\0' ;
     return lenght ;
 }
 
 
 
-int find_the_size_of_stuff_get_the_data_and_get_the_primary_key_num(char *data, table_info *table, char **ans, float *pk, int *cnt) {
+int find_the_size_of_stuff_get_the_data_and_get_the_primary_key_num(char *data, table_info *table, char **ans, float *pk, int *jane) {
     int size = 0;
     int i = 0;
     int j = 0;
@@ -94,11 +74,14 @@ int find_the_size_of_stuff_get_the_data_and_get_the_primary_key_num(char *data, 
     char *row = strdup(data);
     char *field[MAX_COLUMNS] = {0};
     int n = 0;
-    char *p = row;
-    field[n++] = p;
-    while (*p && n < MAX_COLUMNS) {
-        if (*p == '\t') { *p = '\0'; field[n++] = p + 1; }
-        p++;
+    char *somethin = row;
+    field[n++] = somethin ;
+    while (*somethin && n < MAX_COLUMNS) {
+        if (*somethin == '\t') { 
+            *somethin = '\0';
+             field[n++] = somethin + 1; 
+        }
+        somethin++;
     }
 
     while (i < (int)table->num_columns){
@@ -120,13 +103,23 @@ int find_the_size_of_stuff_get_the_data_and_get_the_primary_key_num(char *data, 
             ans[j] = strdup(val) ;
             j++ ;
         }
+        else if (table->columns[i].col_type == DECIMAL){
+            size = size + strlen(val) ;
+            ans[j] = strdup(real_num) ;   
+            j++ ;
+            ans[j] = strdup(val) ;
+            j++ ; 
+        }
         else if (table->columns[i].col_type == CHAR || table->columns[i].col_type == VARCHAR){
             if (strlen(val) > 1024){
                 ans[j] = strdup(toast_num) ;
                 j++;
                 char *tp = toast_tables_insert(val);
                 int cid = 0;
-                if (tp != NULL) { memcpy(&cid, tp, sizeof(int)); free(tp); }
+                if (tp != NULL) { 
+                    memcpy(&cid, tp, sizeof(int)); 
+                    free(tp);
+                }
                 char cid_txt[32];
                 snprintf(cid_txt, sizeof(cid_txt), "%010d", cid);
                 ans[j] = strdup(cid_txt) ;
@@ -162,7 +155,7 @@ int find_the_size_of_stuff_get_the_data_and_get_the_primary_key_num(char *data, 
         i++ ;
     }
     free(row);
-    *cnt = j ;
+    *jane = j ;
     return size;
 }
 
@@ -191,7 +184,7 @@ int FSM_insert (char *insert_data, int page_num , int offset, table_info *table 
     page *pg ;
     char *ans[table->num_columns * 3];
     char buf[PAGE_SIZE] ;
-    int cnt = 0 ;
+    int jane = 0 ;
     int size = 0 ;
     float primary_key = 0 ;
     int fr = -1 ;
@@ -208,8 +201,8 @@ int FSM_insert (char *insert_data, int page_num , int offset, table_info *table 
             not_in_use_get_out(0, fr, bp) ;
             return -1 ;
         }
-        size = find_the_size_of_stuff_get_the_data_and_get_the_primary_key_num(insert_data, table, ans, &primary_key, &cnt);
-        size = flatten_ans(ans, cnt, buf, PAGE_SIZE);
+        size = find_the_size_of_stuff_get_the_data_and_get_the_primary_key_num(insert_data, table, ans, &primary_key, &jane);
+        size = flatten_ans(ans, jane, buf, PAGE_SIZE);
         if (size < 0) {
             not_in_use_get_out(0, fr, bp);
             return -1;
@@ -314,8 +307,8 @@ int FSM_insert (char *insert_data, int page_num , int offset, table_info *table 
         }
     }
     else {
-        size = find_the_size_of_stuff_get_the_data_and_get_the_primary_key_num(insert_data , table , ans , &primary_key , &cnt);
-        size = flatten_ans(ans , cnt , buf , PAGE_SIZE);
+        size = find_the_size_of_stuff_get_the_data_and_get_the_primary_key_num(insert_data , table , ans , &primary_key , &jane);
+        size = flatten_ans(ans , jane , buf , PAGE_SIZE);
         if (size < 0 || size + sizeof(slots) > use_page_size) {
             return -1 ;
         }
@@ -343,18 +336,19 @@ int FSM_insert (char *insert_data, int page_num , int offset, table_info *table 
     }
     int pnum = pg->header.page_num ;
     if (fr == -1){
-        fr = insert_page_in_frame(bp, pnum);
+        write_page_to_file(pg, pnum * PAGE_SIZE) ;
+        fr = insert_page_in_frame(bp, pnum) ;
         if (fr == -1){
-            free(pg);
+            free(pg) ;
             return -1;
         }
-        memcpy(bp->frames[fr], pg, PAGE_SIZE);
-        free(pg);
+        memcpy(bp->frames[fr], pg, PAGE_SIZE) ;
+        free(pg) ;
     }
-    int tx = begin_transaction();
-    if (tx != -1){
-        insert_wal(tx, pnum, 0, buf);
-        end_transaction(tx);
+    int transaction_num = begin_transaction();
+    if (transaction_num != -1){
+        insert_wal(transaction_num, pnum, 0, buf);
+        end_transaction(transaction_num);
     }
     tree_func_for_insert(get_root(table->table_name), (int)primary_key, buf, pnum, pnum * PAGE_SIZE, slot_used);
     not_in_use_get_out(1, fr, bp);
@@ -457,8 +451,6 @@ void put_the_chunk_in_the_list(toast_table_file_header * toast_header , int  chu
 }
 
 
-
-
 char *toast_tables_insert(char *data) {
     toast_table_file_header *toast_header = get_toast_table_file_header() ;
     if (toast_header == NULL) {
@@ -553,7 +545,7 @@ char *toast_tables_insert(char *data) {
                     pg->header.free_size = 0 ;
                     size = 0 ;
                     toast_header->dead_space_available[first] |= (1 << (7 - second)) ;
-                    pg->header.dead_slots[(pg->header.num - 1) / 8] |= (1 << 7 - ((pg->header.num - 1) % 8));
+                    pg->header.dead_slots[(pg->header.num - 1) / 8] |= (1 << (7 - ((pg->header.num - 1) % 8)));
                     put_the_chunk_in_the_list(toast_header, chunk_id, page_num, pg->header.num - 1);
                 }
                 else if (size > pg->header.free_size) {
@@ -574,7 +566,7 @@ char *toast_tables_insert(char *data) {
                     pg->header.free_size = pg->header.free_size - size;
                     toast_header->dead_space = toast_header->dead_space - size;
                     size = 0;
-                    pg->header.dead_slots[(pg->header.num - 1) / 8] |= (1 << 7 - ((pg->header.num - 1) % 8));
+                    pg->header.dead_slots[(pg->header.num - 1) / 8] |= (1 << (7 - ((pg->header.num - 1) % 8)));
                     if (pg->header.free_size < 612) {
                         int bit_pos = 7 - second;
                         toast_header->dead_space_available[first] |= (1 << bit_pos);

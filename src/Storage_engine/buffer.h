@@ -1,26 +1,17 @@
-#include <stdio.h>
+#ifndef BUFFER_POOL_H
+#define BUFFER_POOL_H
+
 #include <stdlib.h>
-#include <string.h>
 #include <stdint.h>
-#include <time.h>
-#include <limits.h>
-#include <fcntl.h>
 #include <unistd.h>
 #include <pthread.h>
-#include "types.h"
 
-#ifndef PAGE_SIZE
-#define PAGE_SIZE 4096
-#endif
-
-#ifndef INVALID_PAGE_ID
-#define INVALID_PAGE_ID 0xFFFFFFFFu
-#endif
+#include "storage_engine.h"
 
 #define frames_in_buf 1024
-#define page_size 4096
+#define buffer_page_size 4096
 #define max_pages 65536
-#define times 3
+#define retry_times 3
 #define wait_time 15
 #define normal_file_name "normal_file"
 
@@ -67,3 +58,11 @@ void write_to_disk(uint32_t page_id, int frame_index, frames *fra);
 void read_from_disk(uint32_t page_id, int frame_index, frames *fra);
 void wait_for_the_next(int time);
 void insert_the_thing(int ind, frames *fra);
+
+extern frames *bp;
+int insert_page_in_frame(frames *fra, int page_num);
+void not_in_use_get_out(int changed, int frame_id, frames *fra);
+void for_the_locks_init(frames *fra);
+void *background_dirty_writer(void *arg);
+
+#endif

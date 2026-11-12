@@ -1,6 +1,5 @@
 #include "storage_engine.h"
 
-int number_of_pages = 0;
 
 int db_open(const char *filename) {
     return open(filename, O_RDWR | O_CREAT, 0644);
@@ -24,6 +23,9 @@ void db_read(int fd, int page_num, uint8_t *buf) {
     }
 }
 
+
+
+
 void write_pagezero(pagezero *pg, const char *filename) {
     FILE *fp = fopen(filename, "wb");
     if (fp == NULL) {
@@ -46,7 +48,7 @@ void db_close(int fd) {
     close(fd);
 }
 
-page *get_page_from_file(const char *filename, long offset) {
+page *get_page_from_named_file(const char *filename, long offset) {
     FILE *file = fopen(filename, "rb");
     if (file == NULL) {
         return NULL;
@@ -66,39 +68,3 @@ page *get_page_from_file(const char *filename, long offset) {
     return ans;
 }
 
-long write_page_to_file(const char *filename, page *p, long offset) {
-    FILE *file = fopen(filename, "r+b");
-    if (file == NULL) {
-        file = fopen(filename, "w+b");
-        if (file == NULL) {
-            return -1;
-        }
-    }
-    if (offset == -1) {
-        fseek(file, 0, SEEK_END);
-        offset = ftell(file);
-    }
-    fseek(file, offset, SEEK_SET);
-    fwrite(p, 1, sizeof(page), file);
-    fclose(file);
-    return offset;
-}
-
-pagezero *get_pagezero(char *filename) {
-    FILE *file = fopen(filename, "rb");
-    if (file == NULL) {
-        return NULL;
-    }
-    pagezero *ans = malloc(sizeof(pagezero));
-    if (ans == NULL) {
-        fclose(file);
-        return NULL;
-    }
-    size_t got = fread(ans, sizeof(pagezero), 1, file);
-    fclose(file);
-    if (got != 1) {
-        free(ans);
-        return NULL;
-    }
-    return ans;
-}

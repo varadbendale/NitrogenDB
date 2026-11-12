@@ -1,3 +1,7 @@
+#include "buffer.h"
+#include "storage_engine.h"
+
+
 void read_from_disk(uint32_t page_id, int frame_index, frames *fra) {
     int fd = open(normal_file_name, O_RDWR | O_CREAT, 0644);
     if (fd == -1) {
@@ -10,7 +14,7 @@ void read_from_disk(uint32_t page_id, int frame_index, frames *fra) {
         n = 0 ; 
     }
     if (n < PAGE_SIZE) {
-        memset(fra->frames[frame_index] + n, 0, PAGE_SIZE - n) ;
+        memset(fra->frames[frame_index] + n , 0 , PAGE_SIZE - n) ;
     }
     close(fd);
     pthread_mutex_unlock(&fra->dt[frame_index]->latch);
@@ -60,7 +64,8 @@ int get_which_is_free(frames *fra, int type) {
         in_use(fra->mp, where_to_put);
         pthread_mutex_unlock(&fra->dt[where_to_put]->latch);
         return where_to_put;
-    } else {
+    } 
+    else {
         if (type == force) {
             where_to_put = give_the_frame_through_clock(fra, force);
             if (where_to_put == -1) {
@@ -71,8 +76,9 @@ int get_which_is_free(frames *fra, int type) {
             in_use(fra->mp, where_to_put);
             pthread_mutex_unlock(&fra->dt[where_to_put]->latch);
             return where_to_put;
-        } else {
-            for (int r = 0; r < times; r++) {
+        } 
+        else {
+            for (int r = 0; r < retry_times; r++) {
                 where_to_put = give_the_frame_through_clock(fra, soft);
                 if (where_to_put != -1) {
                     pthread_mutex_lock(&fra->dt[where_to_put]->latch);
@@ -91,7 +97,8 @@ int get_which_is_free(frames *fra, int type) {
                     in_use(fra->mp, where_to_put);
                     pthread_mutex_unlock(&fra->dt[where_to_put]->latch);
                     return where_to_put;
-                } else {
+                } 
+                else {
                     return -1;
                 }
             }
@@ -102,7 +109,9 @@ int get_which_is_free(frames *fra, int type) {
 
 void make_it_free(map_out_frames *map, int thing, int page_id) {
     map->bitmaps[thing / 8] &= ~(1 << (thing % 8));
-    if (page_id >= 0 && page_id < max_pages) map->frame_page_hash[page_id] = -1;
+    if (page_id >= 0 && page_id < max_pages){
+        map->frame_page_hash[page_id] = -1 ;
+    } 
 }
 
 void *background_dirty_writer(void *arg) {
@@ -115,7 +124,6 @@ void *background_dirty_writer(void *arg) {
             }
         }
     }
-    return NULL;
 }
 
 void in_use(map_out_frames *map, int thing) {
@@ -187,6 +195,9 @@ int give_the_frame_through_clock(frames *fra, int type) {
 
 int insert_page_in_frame(frames *fra, int page_num) {
     int where_to_put_frame;
+    if (page_num < 0 || page_num >= max_pages) { 
+        return -1;
+    }
     if (fra->mp->frame_page_hash[page_num] != -1) {
         fra->stat->hits++;
         where_to_put_frame = fra->mp->frame_page_hash[page_num];
@@ -246,10 +257,10 @@ void delete_the_page(int fd, uint32_t page_id, frames *fra) {
         return;
     }
     fra->dt[frame_index]->io_lock = 1;
-    char zeros[page_size];
-    memset(zeros, 0, page_size);
-    lseek(fd, (off_t)page_id * page_size, SEEK_SET);
-    write(fd, zeros, page_size);
+    char zeros[PAGE_SIZE];
+    memset(zeros, 0, PAGE_SIZE);
+    lseek(fd, (off_t)page_id * PAGE_SIZE, SEEK_SET);
+    write(fd, zeros, PAGE_SIZE);
     fra->dt[frame_index]->io_lock = 0;
     fra->dt[frame_index]->valid = 0;
     fra->dt[frame_index]->dirty = 0;
@@ -260,18 +271,19 @@ void delete_the_page(int fd, uint32_t page_id, frames *fra) {
     pthread_mutex_unlock(&fra->dt[frame_index]->latch);
 }
 
-void prefetch(int fd, uint32_t page_id) {
-    posix_fadvise(fd, (off_t)page_id * PAGE_SIZE, PAGE_SIZE * 4, POSIX_FADV_WILLNEED);
-}
 
-void sequential_hint(int fd) {
-    posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
-}
+// void prefetch(int fd, uint32_t page_id) {
+//     posix_fadvise(fd, (off_t)page_id * PAGE_SIZE, PAGE_SIZE * 4, POSIX_FADV_WILLNEED);
+// }
 
-void random_hint(int fd) {
-    posix_fadvise(fd, 0, 0, POSIX_FADV_RANDOM);
-}
+// void sequential_hint(int fd) {
+//     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+// }
 
-void done_with_file(int fd) {
-    posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
-}
+// void random_hint(int fd) {
+//     posix_fadvise(fd, 0, 0, POSIX_FADV_RANDOM);
+// }
+
+// void done_with_file(int fd) {
+//     posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
+// }
