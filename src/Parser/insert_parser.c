@@ -1,3 +1,23 @@
+#include "Parser.h"
+
+
+bool if_function(char *word) {
+    (void)word;
+    return false;        
+}
+
+int priority(char *string) {
+    (void)string;
+    return 0;               
+}
+
+itree *function_insert(char ***buf, itree *node, int check, int start_row, int start_col, int i, int j) {
+    (void)buf; (void)node; (void)check; (void)start_row; (void)start_col; (void)i; (void)j;
+    return NULL;      
+}
+
+
+
 insert_parser_tree *createNodeInsert(char *comp) {
     insert_parser_tree *node = malloc(sizeof(insert_parser_tree));  
     if (node == NULL) {
