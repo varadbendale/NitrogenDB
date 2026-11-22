@@ -24,10 +24,38 @@ void db_read(int fd, int page_num, uint8_t *buf) {
 }
 
 
-
-
 void write_pagezero(pagezero *pg, const char *filename) {
-    FILE *fp = fopen(filename, "wb");
+    if (pg->num_tables == 0) {
+        return ; 
+    }
+    table_info *tbl_name  = &pg->tables[pg->num_tables - 1];
+    mkdir(tbl_name->table_name , 0777) ;
+
+    pagezero *tempo = calloc(1, sizeof(pagezero)) ;
+    if (tempo == NULL) {
+        return ;
+    }
+
+    tempo->db_magic = pg->db_magic;
+    tempo->version = pg->version;
+    tempo->page_size = pg->page_size;
+    tempo->num_tables = 1;
+    tempo->tables[0] = *tbl_name;
+
+    char repo[256];
+    snprintf(repo, sizeof repo, "%s/%s", tbl_name->table_name, filename);
+    FILE *fp = fopen(repo, "wb");
+    if (fp != NULL) {
+        fwrite(tempo , sizeof(pagezero) , 1 ,  fp) ;
+        fclose(fp) ;
+    }
+    free(tempo);
+}
+
+void update_pagezero(pagezero *pg, const char *table) {
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s", table, DB_FILE);
+    FILE *fp = fopen(path, "wb");
     if (fp == NULL) {
         return;
     }
@@ -35,14 +63,17 @@ void write_pagezero(pagezero *pg, const char *filename) {
     fclose(fp);
 }
 
-void read_pagezero(pagezero *pg, const char *filename) {
-    FILE *fp = fopen(filename, "rb");
+void read_pagezero(pagezero *pg , const char *table) {
+    char path[512] ;
+    snprintf(path , sizeof path , "%s/%s" , table , DB_FILE);
+    FILE *fp = fopen(path , "rb");
     if (fp == NULL) {
-        return;
+        return ;
     }
-    fread(pg, sizeof(pagezero), 1, fp);
-    fclose(fp);
+    fread(pg , sizeof(pagezero) , 1 , fp) ;
+    fclose(fp) ;
 }
+
 
 void db_close(int fd) {
     close(fd);

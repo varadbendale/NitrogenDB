@@ -22,7 +22,7 @@ void default_table_info(table_info * ti){
     memset(ti, 0, sizeof(table_info));
     strncpy(ti->table_name, "none", sizeof(ti->table_name) - 1);
     ti->num_columns = 0;
-    ti->root_page   = 0;
+    ti->root_page = 0;
     for (int i = 0; i < MAX_COLUMNS; i++){
         default_column_info(&ti->columns[i]);
     }

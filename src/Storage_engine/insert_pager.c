@@ -160,24 +160,27 @@ int find_the_size_of_stuff_get_the_data_and_get_the_primary_key_num(char *data, 
 }
 
 
-pagezero *get_pagezero(char *filename) {
-    FILE *file = fopen(filename, "rb");
+pagezero *get_pagezero(char *table) {
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s", table, DB_FILE);
+    FILE *file = fopen(path, "rb");
     if (file == NULL) {
         return NULL;
     }
-    pagezero *ans = malloc(sizeof(pagezero)) ;
+    pagezero *ans = malloc(sizeof(pagezero));
     if (ans == NULL) {
         fclose(file);
         return NULL;
     }
-    size_t bytes_read = fread(ans , 1 , sizeof(pagezero) , file) ;
-    fclose(file) ;
+    size_t bytes_read = fread(ans, 1, sizeof(pagezero), file);
+    fclose(file);
     if (bytes_read == 0) {
-        free(ans) ;
-        return NULL ;
+        free(ans);
+        return NULL;
     }
     return ans;
 }
+
 
 
 int FSM_insert (char *insert_data, int page_num , int offset, table_info *table  ) {
