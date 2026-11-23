@@ -28,7 +28,6 @@
 #define toast_filename "toast_data"
 
 extern int number_of_pages;
-char *toast_tables_insert(char *data);
 
 #define PAGE_SIZE 4096
 #define INVALID_PAGE_ID 0xFFFFFFFFu
@@ -80,6 +79,8 @@ typedef struct {
     uint32_t num_tables;
     table_info tables[MAX_TABLES];
 } pagezero;
+
+char *toast_tables_insert(char *data ,  table_info *table) ; 
 
 typedef struct {
     int hash[307];

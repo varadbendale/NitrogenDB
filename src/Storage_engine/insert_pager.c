@@ -22,15 +22,17 @@ page *get_page_from_file( int offset ) {
 }
 
 
-int write_page_to_file(page *p, int offset ){
-    FILE *file = fopen(data_filename, "r+b") ;
+int write_page_to_file(page *p, int offset, const char *table) {
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s", table, data_filename);
+    FILE *file = fopen(path, "r+b");
     if (file == NULL) {
-        file = fopen(data_filename, "w+b") ;
-        if (file == NULL){
-            return -1 ;
+        file = fopen(path, "w+b");
+        if (file == NULL) {
+            return -1;
         }
     }
-    if (offset == -1 ){
+    if (offset == -1) {
         fseek(file, 0, SEEK_END);
         offset = ftell(file);
     }
@@ -114,7 +116,7 @@ int find_the_size_of_stuff_get_the_data_and_get_the_primary_key_num(char *data, 
             if (strlen(val) > 1024){
                 ans[j] = strdup(toast_num) ;
                 j++;
-                char *tp = toast_tables_insert(val);
+                char *tp = toast_tables_insert(val , table );
                 int cid = 0;
                 if (tp != NULL) { 
                     memcpy(&cid, tp, sizeof(int)); 
@@ -191,6 +193,7 @@ int FSM_insert (char *insert_data, int page_num , int offset, table_info *table 
     int size = 0 ;
     float primary_key = 0 ;
     int fr = -1 ;
+
     int slot_used = 0 ;
     (void)offset ;
 
@@ -339,7 +342,7 @@ int FSM_insert (char *insert_data, int page_num , int offset, table_info *table 
     }
     int pnum = pg->header.page_num ;
     if (fr == -1){
-        write_page_to_file(pg, pnum * PAGE_SIZE) ;
+        write_page_to_file(pg, pnum * PAGE_SIZE , table->table_name ) ;
         fr = insert_page_in_frame(bp, pnum) ;
         if (fr == -1){
             free(pg) ;
@@ -358,9 +361,10 @@ int FSM_insert (char *insert_data, int page_num , int offset, table_info *table 
     return pnum ;
 }
 
-
-toast_table_file_header *get_toast_table_file_header() {
-    FILE *file = fopen(toast_header_filename, "rb") ;
+toast_table_file_header *get_toast_table_file_header(const char *table) {
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s", table, toast_header_filename);
+    FILE *file = fopen(path, "rb") ;
     toast_table_file_header *ans = calloc(1, sizeof(toast_table_file_header));
     if (ans == NULL) {
         if (file != NULL) fclose(file) ;
@@ -382,8 +386,10 @@ toast_table_file_header *get_toast_table_file_header() {
     return ans ;
 }
 
-void write_toast_table_file_header(toast_table_file_header *h) {
-    FILE *file = fopen(toast_header_filename, "wb");
+void write_toast_table_file_header(toast_table_file_header *h, const char *table) {
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s", table, toast_header_filename);
+    FILE *file = fopen(path, "wb");
     if (file == NULL){
         return ;
     }
@@ -393,10 +399,12 @@ void write_toast_table_file_header(toast_table_file_header *h) {
     fclose(file);
 }
 
-void write_toast(toast * t, long offset) {
-    FILE *file = fopen(toast_map_filename , "r+b");
+void write_toast(toast * t, long offset, const char *table) {
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s", table, toast_map_filename);
+    FILE *file = fopen(path , "r+b");
     if (file == NULL){
-         file = fopen(toast_map_filename, "w+b") ;
+         file = fopen(path, "w+b") ;
     }
     if (file == NULL) {
         return ;
@@ -406,10 +414,12 @@ void write_toast(toast * t, long offset) {
     fclose(file);
 }
 
-void write_toast_page(long file_offset, page *pg) {
-    FILE *fp = fopen(toast_filename , "r+b");
+void write_toast_page(long file_offset, page *pg, const char *table) {
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s", table, toast_filename);
+    FILE *fp = fopen(path , "r+b");
     if (!fp) {
-        fp = fopen(toast_filename , "w+b");
+        fp = fopen(path , "w+b");
     }
     if (!fp ){
         return ;
@@ -419,28 +429,29 @@ void write_toast_page(long file_offset, page *pg) {
     fclose(fp);
 }
 
-
-page *get_toast_page_from_file(long offset) {
-    FILE *file = fopen(toast_filename, "rb");
+page *get_toast_page_from_file(long offset , const char *table) {
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s" , table , toast_filename);
+    FILE *file = fopen(path, "rb");
     if (file == NULL) {
         return NULL ;
     }
     page *ans = malloc(sizeof(page));
     if (ans == NULL) {
         fclose(file);
-        return NULL;
+        return NULL ;
     }
     fseek(file, offset, SEEK_SET);
-    size_t bytes_read = fread(ans, 1, sizeof(page), file);
-    fclose(file);
+    size_t bytes_read = fread(ans , 1 , sizeof(page) , file);
+    fclose(file); 
     if (bytes_read != sizeof(page)) {
-        free(ans);
-        return NULL;
+        free(ans) ;
+        return NULL ;
     }
     return ans;
 }
 
-void put_the_chunk_in_the_list(toast_table_file_header * toast_header , int  chunk_id , int page_num , int slot_num){
+void put_the_chunk_in_the_list(toast_table_file_header * toast_header , int  chunk_id , int page_num , int slot_num , table_info * table ){
     toast_header->num_of_lines_in_map++ ;
     toast_header->map_out_toast[chunk_id].chunk_id = chunk_id ;
     toast_header->map_out_toast[chunk_id].offset_of_the_same = realloc(toast_header->map_out_toast[chunk_id].offset_of_the_same, (toast_header->map_out_toast[chunk_id].offset_number + 1) * sizeof(int));
@@ -449,13 +460,13 @@ void put_the_chunk_in_the_list(toast_table_file_header * toast_header , int  chu
     tst->chunk_id = chunk_id ;
     tst->page = page_num ;
     tst->slot_number = slot_num ;
-    write_toast( tst ,  (long)(toast_header->num_of_lines_in_map - 1) * sizeof(toast)   ) ;
+    write_toast( tst ,  (long)(toast_header->num_of_lines_in_map - 1) * sizeof(toast)  , table->table_name  ) ;
     free(tst);
 }
 
 
-char *toast_tables_insert(char *data) {
-    toast_table_file_header *toast_header = get_toast_table_file_header() ;
+char *toast_tables_insert(char *data ,  table_info *table) {
+    toast_table_file_header *toast_header = get_toast_table_file_header(table->table_name) ;
     if (toast_header == NULL) {
         return NULL;
     }
@@ -496,7 +507,7 @@ char *toast_tables_insert(char *data) {
                 toast_header->dead_space = 0;
             }
             else {
-                page *pg = get_toast_page_from_file(page_num * 4096L);
+                page *pg = get_toast_page_from_file(page_num * 4096L , table->table_name );
                 if (pg == NULL) {
                     toast_header->dead_space_available[first] |= (1 << (7 - second)) ;
                     continue;
@@ -549,7 +560,7 @@ char *toast_tables_insert(char *data) {
                     size = 0 ;
                     toast_header->dead_space_available[first] |= (1 << (7 - second)) ;
                     pg->header.dead_slots[(pg->header.num - 1) / 8] |= (1 << (7 - ((pg->header.num - 1) % 8)));
-                    put_the_chunk_in_the_list(toast_header, chunk_id, page_num, pg->header.num - 1);
+                    put_the_chunk_in_the_list(toast_header, chunk_id, page_num, pg->header.num - 1 , table );
                 }
                 else if (size > pg->header.free_size) {
                     memcpy(pg->data + wonder, data + offset, pg->header.free_size);
@@ -561,7 +572,7 @@ char *toast_tables_insert(char *data) {
                     int temo = 7 - second;
                     toast_header->dead_space_available[first] |= (1 << temo);
                     pg->header.dead_slots[(pg->header.num - 1) / 8] |= (1 << (7 - ((pg->header.num - 1) % 8))) ;
-                    put_the_chunk_in_the_list(toast_header , chunk_id , page_num , pg->header.num - 1) ;
+                    put_the_chunk_in_the_list(toast_header , chunk_id , page_num , pg->header.num - 1 , table ) ;
                 }
                 else {
                     memcpy(pg->data + wonder, data + offset, size);
@@ -574,9 +585,9 @@ char *toast_tables_insert(char *data) {
                         int bit_pos = 7 - second;
                         toast_header->dead_space_available[first] |= (1 << bit_pos);
                     }
-                    put_the_chunk_in_the_list(toast_header, chunk_id, page_num, pg->header.num - 1);
+                    put_the_chunk_in_the_list(toast_header, chunk_id, page_num, pg->header.num - 1 , table);
                 }
-                write_toast_page(page_num * 4096, pg);
+                write_toast_page(page_num * 4096, pg , table->table_name);
                 free(pg);
             }
         }
@@ -598,8 +609,8 @@ char *toast_tables_insert(char *data) {
                 toast_header->dead_space_available[temp_slot_num] |= (1 << (7 - (toast_header->pages_used % 8)));
                 temp_slot_num = pg->header.num / 8;
                 pg->header.dead_slots[temp_slot_num] |= (1 << (7 - ((pg->header.num - 1) % 8)));
-                put_the_chunk_in_the_list(toast_header, chunk_id, pg->header.page_num, 0);
-                write_toast_page(toast_header->pages_used * 4096, pg);
+                put_the_chunk_in_the_list(toast_header, chunk_id, pg->header.page_num, 0 , table );
+                write_toast_page(toast_header->pages_used * 4096, pg , table->table_name);
                 free(pg);
             }
             else {
@@ -627,13 +638,13 @@ char *toast_tables_insert(char *data) {
                     pg->header.dead_slots[temp_slot_num] |= (1 << (7 - ((pg->header.num - 1) % 8)));
                 }
                 size = 0;
-                put_the_chunk_in_the_list(toast_header, chunk_id, pg->header.page_num, 0);
-                write_toast_page(toast_header->pages_used * 4096, pg);
+                put_the_chunk_in_the_list(toast_header, chunk_id, pg->header.page_num, 0 , table );
+                write_toast_page(toast_header->pages_used * 4096, pg , table->table_name );
                 free(pg);
             }
         }
     }
-    write_toast_table_file_header(toast_header);
+    write_toast_table_file_header(toast_header , table->table_name);
     for (int i = 0; i <= chunk_id; i++){
         free(toast_header->map_out_toast[i].offset_of_the_same);
     }

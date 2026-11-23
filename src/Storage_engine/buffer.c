@@ -14,7 +14,7 @@ void read_from_disk(uint32_t page_id, int frame_index, frames *fra) {
         n = 0 ; 
     }
     if (n < PAGE_SIZE) {
-        memset(fra->frames[frame_index] + n , 0 , PAGE_SIZE - n) ;
+        memset(fra->frames[fram_index] + n , 0 , PAGE_SIZE - n) ;
     }
     close(fd);
     pthread_mutex_unlock(&fra->dt[frame_index]->latch);

@@ -1,5 +1,6 @@
 #include "storage_engine.h"
-
+#include <sys/stat.h>
+#include <sys/types.h>
 
 int db_open(const char *filename) {
     return open(filename, O_RDWR | O_CREAT, 0644);

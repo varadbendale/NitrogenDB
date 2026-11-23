@@ -149,6 +149,7 @@ char *to_decimal(const char *str, int first, int second){
 
 
 void struct_for_insert(itree *tree){
+    char * table_name_we_need = tree->table ; 
     int error = 0;
     if (strcmp(tree->comp, "INSERT INTO") == 0){
         if (tree->ignore == 1) {
@@ -169,7 +170,7 @@ void struct_for_insert(itree *tree){
     if (error == 2 || error == 3){
         return;
     }
-    pagezero *header = get_pagezero(DB_FILE);
+    pagezero *header = get_pagezero(tree->table );
     if (header == NULL){
         return;
     }
@@ -352,6 +353,6 @@ void struct_for_insert(itree *tree){
         free(temp_column[k]);
     }
     free(temp_column);
-    write_pagezero(header, DB_FILE);
+    update_pagezero(header , table_name_we_need) ; 
     free(header);
 }
