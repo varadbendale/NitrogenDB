@@ -41,9 +41,8 @@ void buffer_pool_init(void) {
         bp->dt[i] = calloc(1, sizeof(details));
         bp->dt[i]->page_id = INVALID_PAGE_ID;
     }
-    for (int page = 0; page < max_pages; page++) {
-        bp->mp->frame_page_hash[page] = -1;
-    }
+    /* frame_page_hash is now [max_tables][max_pages]; -1 = all bits set */
+    memset(bp->mp->frame_page_hash, -1, sizeof(bp->mp->frame_page_hash));
     bp->mp->free_bits = frames_in_buf;
     for_the_locks_init(bp);
 
@@ -199,7 +198,7 @@ static void run_query(void) {
         else {
             proper_data.query = rows;
             main_create_parser(&pg);
-            write_pagezero(&pg, DB_FILE);
+            write_pagezero(&pg, data_filename);
             out("OK");
         }
     }
