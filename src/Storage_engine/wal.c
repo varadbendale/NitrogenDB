@@ -139,8 +139,8 @@ void default_record(records_struct *record, int type) {
     }
 }
 
-void insert_wal(int transaction_id, int page_id, int offset, char *data) {
-    if (data == NULL || transaction_id < 0) {
+void insert_wal(int transaction_id, int page_id, int offset, char *data , char * table_name) {
+    if (data == NULL || transaction_id < 0 || table_name == NULL) {
         return  ;
     }
     int len = strlen(data) ;
@@ -213,6 +213,8 @@ void insert_wal(int transaction_id, int page_id, int offset, char *data) {
         }
         size_t data_we_put = records_sturct_size + step ;
         default_record(&record, 1) ;
+        strncpy(record.table_name, table_name, 63);
+        record.table_name[63] = '\0';
         record.header.transaction = transaction_id ;
         memcpy(record.record_value.insert.inserted_data , data +data_putted , step) ;
         data_putted = data_putted + step ;
@@ -253,6 +255,7 @@ void insert_wal(int transaction_id, int page_id, int offset, char *data) {
         close(file_num);
     }
 }
+
 
 void checkpoint(void) {
 }

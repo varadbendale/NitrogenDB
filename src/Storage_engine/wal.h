@@ -1,5 +1,4 @@
 #ifndef WAL_H
-#define WAL_H
 #include "storage_engine.h"
 #include <sys/stat.h>
 #include <errno.h>
@@ -55,12 +54,14 @@ typedef struct {
     int running_transaction[max_size_for_data];
     int dirty_page_number;
     int dirty_page_id[max_size_for_data];
+    int dirty_page_slot[max_size_for_data];
 } checkpoint_struct;
 
 typedef struct {
     uint32_t crc;
     uint8_t type;
     wal_page_header header;
+    char table_name[64];
     union {
         insert_info insert;
         update_info update;

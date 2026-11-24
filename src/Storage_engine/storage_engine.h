@@ -1,6 +1,5 @@
 #ifndef TYPES_H
 #define TYPES_H
-#define DB_FILE "nitrogen.db"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -244,7 +243,7 @@ extern hs_col *hs_head;
 void start_the_wal(void);
 int begin_transaction(void);
 void end_transaction(int id);
-void insert_wal(int transaction_id, int page_id, int offset, char *data);
+void insert_wal(int transaction_id, int page_id, int offset, char *data  , char * table_name);
 
 void buffer_pool_init(void);
 void buffer_pool_flush(void);

@@ -2,8 +2,35 @@
 #include "storage_engine.h"
 
 
+static char table_created[MAX_TABLES][64];
+
+int get_the_table_name(const char *table_name) {
+    for (int i = 0; i < MAX_TABLES; i++) { 
+        if (table_created[i][0] != '\0' && strcmp(table_created[i] , table_name) == 0)  {
+            return i ;
+        }
+    }
+    FILE *fp = fopen(catalog_file , "r");
+    if (fp == NULL) {
+        return -1;
+    }
+    char line[128];
+    int j = 0;
+    while (j < MAX_TABLES && fscanf(fp, "%63s", table_created[j]) == 1) {
+        if (strcmp(table_created[j], table_name) == 0) {
+            fclose(fp);
+            return j;
+        }
+        j++;
+    }
+    fclose(fp);
+    return -1;
+}
+
 void read_from_disk(uint32_t page_id, int frame_index, frames *fra) {
-    int fd = open(normal_file_name, O_RDWR | O_CREAT, 0644);
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s", fra->dt[frame_index]->table_name, normal_file_name);
+    int fd = open(path, O_RDWR | O_CREAT, 0644);
     if (fd == -1) {
         return;
     }
@@ -14,14 +41,16 @@ void read_from_disk(uint32_t page_id, int frame_index, frames *fra) {
         n = 0 ; 
     }
     if (n < PAGE_SIZE) {
-        memset(fra->frames[fram_index] + n , 0 , PAGE_SIZE - n) ;
+        memset(fra->frames[frame_index] + n , 0 , PAGE_SIZE - n) ;
     }
     close(fd);
     pthread_mutex_unlock(&fra->dt[frame_index]->latch);
 }
 
 void write_to_disk(uint32_t page_id, int frame_index, frames *fra) {
-    int fd = open(normal_file_name, O_RDWR | O_CREAT, 0644);
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s", fra->dt[frame_index]->table_name, normal_file_name);
+    int fd = open(path, O_RDWR | O_CREAT, 0644);
     if (fd == -1) {
         return;
     }
@@ -107,10 +136,10 @@ int get_which_is_free(frames *fra, int type) {
     return -1;
 }
 
-void make_it_free(map_out_frames *map, int thing, int page_id) {
+void make_it_free(map_out_frames *map, int thing, int slot, int page_id) {
     map->bitmaps[thing / 8] &= ~(1 << (thing % 8));
-    if (page_id >= 0 && page_id < max_pages){
-        map->frame_page_hash[page_id] = -1 ;
+    if (slot >= 0 && slot < MAX_TABLES && page_id >= 0 && page_id < max_pages){
+        map->frame_page_hash[slot][page_id] = -1 ;
     } 
 }
 
@@ -176,6 +205,7 @@ int give_the_frame_through_clock(frames *fra, int type) {
     }
     pthread_mutex_lock(&fra->dt[ind]->latch);
     uint32_t old_page = fra->dt[ind]->page_id;
+    int old_slot = get_the_table_name(fra->dt[ind]->table_name);
     if (fra->dt[ind]->dirty == 1) {
         fra->stat->flushes++;
         fra->dt[ind]->dirty = 0;
@@ -188,31 +218,39 @@ int give_the_frame_through_clock(frames *fra, int type) {
     fra->dt[ind]->page_id = INVALID_PAGE_ID;
     fra->dt[ind]->use_count = 0;
     fra->dt[ind]->clock_treated_bit = 0;
-    make_it_free(fra->mp, ind, old_page);
+    make_it_free(fra->mp, ind, old_slot, old_page);
+    fra->dt[ind]->table_name[0] = '\0';
     pthread_mutex_unlock(&fra->dt[ind]->latch);
     return ind;
 }
 
-int insert_page_in_frame(frames *fra, int page_num) {
+int insert_page_in_frame(frames *fra, int page_num ,  char * table_name) {
     int where_to_put_frame;
     if (page_num < 0 || page_num >= max_pages) { 
         return -1;
     }
-    if (fra->mp->frame_page_hash[page_num] != -1) {
+    int slot = get_the_table_name(table_name);
+    if (slot < 0) {
+        return -1;
+    }
+    if (fra->mp->frame_page_hash[slot][page_num] != -1) {
         fra->stat->hits++;
-        where_to_put_frame = fra->mp->frame_page_hash[page_num];
+        where_to_put_frame = fra->mp->frame_page_hash[slot][page_num];
         pthread_mutex_lock(&fra->dt[where_to_put_frame]->latch);
         fra->dt[where_to_put_frame]->use_count++;
         fra->dt[where_to_put_frame]->clock_treated_bit++;
         pthread_mutex_unlock(&fra->dt[where_to_put_frame]->latch);
         return where_to_put_frame;
-    } else {
+    } 
+    else {
         fra->stat->misses++;
         where_to_put_frame = get_which_is_free(fra, soft);
         if (where_to_put_frame == -1) {
             return -1;
         }
         pthread_mutex_lock(&fra->dt[where_to_put_frame]->latch);
+        strncpy(fra->dt[where_to_put_frame]->table_name, table_name, 63);
+        fra->dt[where_to_put_frame]->table_name[63] = '\0';
         fra->dt[where_to_put_frame]->io_lock = 1;
         read_from_disk(page_num, where_to_put_frame, fra);
         fra->dt[where_to_put_frame]->io_lock = 0;
@@ -221,7 +259,7 @@ int insert_page_in_frame(frames *fra, int page_num) {
         fra->dt[where_to_put_frame]->dirty = 0;
         fra->dt[where_to_put_frame]->use_count = 1;
         fra->dt[where_to_put_frame]->clock_treated_bit = 1;
-        fra->mp->frame_page_hash[page_num] = where_to_put_frame;
+        fra->mp->frame_page_hash[slot][page_num] = where_to_put_frame;
         pthread_mutex_unlock(&fra->dt[where_to_put_frame]->latch);
         return where_to_put_frame;
     }
@@ -246,8 +284,12 @@ void insert_the_thing(int ind, frames *fra) {
     pthread_mutex_unlock(&fra->dt[ind]->latch);
 }
 
-void delete_the_page(int fd, uint32_t page_id, frames *fra) {
-    int frame_index = fra->mp->frame_page_hash[page_id];
+void delete_the_page(int fd, uint32_t page_id, frames *fra, const char *table_name) {
+    int slot = get_the_table_name(table_name);
+    if (slot < 0 || page_id >= max_pages) {
+        return;
+    }
+    int frame_index = fra->mp->frame_page_hash[slot][page_id];
     if (frame_index == -1) {
         return;
     }
@@ -267,7 +309,8 @@ void delete_the_page(int fd, uint32_t page_id, frames *fra) {
     fra->dt[frame_index]->page_id = INVALID_PAGE_ID;
     fra->dt[frame_index]->use_count = 0;
     fra->dt[frame_index]->clock_treated_bit = 0;
-    make_it_free(fra->mp, frame_index, page_id);
+    make_it_free(fra->mp, frame_index, slot, page_id);
+    fra->dt[frame_index]->table_name[0] = '\0';
     pthread_mutex_unlock(&fra->dt[frame_index]->latch);
 }
 

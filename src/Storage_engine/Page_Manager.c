@@ -27,10 +27,16 @@ void db_read(int fd, int page_num, uint8_t *buf) {
 
 void write_pagezero(pagezero *pg, const char *filename) {
     if (pg->num_tables == 0) {
-        return ; 
+        return ;
     }
     table_info *tbl_name  = &pg->tables[pg->num_tables - 1];
     mkdir(tbl_name->table_name , 0777) ;
+
+    FILE *cat = fopen("tables.cat", "a");
+    if (cat != NULL) {
+        fprintf(cat, "%s\n", tbl_name->table_name);
+        fclose(cat);
+    }
 
     pagezero *tempo = calloc(1, sizeof(pagezero)) ;
     if (tempo == NULL) {
@@ -48,14 +54,15 @@ void write_pagezero(pagezero *pg, const char *filename) {
     FILE *fp = fopen(repo, "wb");
     if (fp != NULL) {
         fwrite(tempo , sizeof(pagezero) , 1 ,  fp) ;
-        fclose(fp) ;
+        fclose(fp);
     }
     free(tempo);
 }
 
+
 void update_pagezero(pagezero *pg, const char *table) {
     char path[512];
-    snprintf(path, sizeof path, "%s/%s", table, DB_FILE);
+    snprintf(path, sizeof path, "%s/%s", table, data_filename);
     FILE *fp = fopen(path, "wb");
     if (fp == NULL) {
         return;
@@ -66,7 +73,7 @@ void update_pagezero(pagezero *pg, const char *table) {
 
 void read_pagezero(pagezero *pg , const char *table) {
     char path[512] ;
-    snprintf(path , sizeof path , "%s/%s" , table , DB_FILE);
+    snprintf(path , sizeof path , "%s/%s" , table , data_filename);
     FILE *fp = fopen(path , "rb");
     if (fp == NULL) {
         return ;
